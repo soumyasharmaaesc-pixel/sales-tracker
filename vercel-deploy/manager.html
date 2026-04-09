@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TheHireHub.AI - Manager Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; background: #F9FAFB; }
+    #root { width: 100%; }
+  </style>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script>window._ROLE = "manager";</script>
+  <script type="text/babel">
+const { useState, useMemo, useCallback } = React;
+const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, Area, AreaChart } = Recharts;
+
+
+// ─── THEME ───
+const C = {
+  pri: "#4F46E5", priL: "#818CF8", ok: "#10B981", warn: "#F59E0B", bad: "#EF4444",
+  info: "#3B82F6", g: "#6B7280", gL: "#F3F4F6", w: "#FFFFFF", d: "#111827",
+  pur: "#8B5CF6", teal: "#14B8A6", rose: "#F43F5E",
+};
+const SC = { Lead: "#818CF8", Discovery: "#3B82F6", Demo: "#8B5CF6", Trial: "#F59E0B", Proposal: "#F97316", Closed: "#10B981", Lost: "#EF4444" };
+const SBG = { Lead: "#EEF2FF", Discovery: "#DBEAFE", Demo: "#EDE9FE", Trial: "#FEF3C7", Proposal: "#FFEDD5", Closed: "#D1FAE5", Lost: "#FEE2E2" };
+const STAGES = ["Lead", "Discovery", "Demo", "Trial", "Proposal", "Closed", "Lost"];
+const SEGMENTS = ["SMB", "Mid-Market", "Enterprise"];
+const GEOS = ["India", "US/UK", "ME/UAE", "APAC"];
+const card = { background: C.w, borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", border: "1px solid #E5E7EB" };
+const btnS = (color, filled) => ({
+  padding: "7px 16px", borderRadius: 8, border: filled ? "none" : `1.5px solid ${color}`,
+  background: filled ? color : "transparent", color: filled ? C.w : color,
+  fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: 6,
+});
+const inp = { padding: "8px 12px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" };
+const sel = { ...inp, background: C.w, cursor: "pointer" };
+
+// ─── INITIAL DATA (Day 1 — April 10, 2026) ───
+const initPipeline = [];
+
+const initWeeklyReports = [
+  { id: 1, weekLabel: "Week 1 (Apr 10–16)", weekStart: "2026-04-10", calls: 0, emails: 0, linkedin: 0, demosBooked: 0, demosDone: 0, proposals: 0, closed: 0, topWin: "", blockers: "", plan: "", submitted: false },
+];
+
+const initOnboarding = [
+  { week: 1, title: "Product Deep-Dive & Shadowing", startDate: "Apr 10", endDate: "Apr 16", tasks: [
+    { id: "1-1", task: "Complete product deep-dive training", done: false },
+    { id: "1-2", task: "Shadow 3+ co-founder demos", done: false },
+    { id: "1-3", task: "Set up HubSpot CRM with pipeline stages", done: false },
+    { id: "1-4", task: "Deliver first independent product demo", done: false },
+  ]},
+  { week: 2, title: "ICP Training & Outbound Setup", startDate: "Apr 17", endDate: "Apr 23", tasks: [
+    { id: "2-1", task: "Complete ICP & messaging workshop", done: false },
+    { id: "2-2", task: "Build 100+ prospect list in Apollo", done: false },
+    { id: "2-3", task: "Launch first email sequence (50 contacts)", done: false },
+    { id: "2-4", task: "Start LinkedIn outbound (10 touches/day)", done: false },
+  ]},
+  { week: 3, title: "Solo Demos & Pipeline Building", startDate: "Apr 24", endDate: "Apr 30", tasks: [
+    { id: "3-1", task: "Complete 3+ solo demos", done: false },
+    { id: "3-2", task: "Objection handling roleplay with co-founders", done: false },
+    { id: "3-3", task: "Get competitive positioning training", done: false },
+    { id: "3-4", task: "Pipeline value > $5K MRR in CRM", done: false },
+  ]},
+  { week: 4, title: "Full Outbound Execution", startDate: "May 1", endDate: "May 7", tasks: [
+    { id: "4-1", task: "50+ outbound touches/day", done: false },
+    { id: "4-2", task: "Follow up on all trial accounts", done: false },
+    { id: "4-3", task: "Progress 2+ deals to Proposal stage", done: false },
+    { id: "4-4", task: "Close or advance first 1-2 deals", done: false },
+  ]},
+  { week: 5, title: "Full Ramp — Operate Independently", startDate: "May 8", endDate: "May 15", tasks: [
+    { id: "5-1", task: "Independently running full sales cycle", done: false },
+    { id: "5-2", task: "2+ deals closed or in active trial", done: false },
+    { id: "5-3", task: "Consistent 5+ demos/week pace", done: false },
+    { id: "5-4", task: "CRM hygiene: all deals updated daily", done: false },
+  ]},
+];
+
+const initMessages = [
+  { id: 1, date: "2026-04-10", from: "Management", text: "Welcome aboard! This is Day 1. Focus on product deep-dive and shadowing demos this week. CRM should be set up by end of day.", type: "target" },
+];
+
+const initNotes = [];
+
+// ─── GTM PLAN BENCHMARKS (FY27 — STRETCH CASE) ───
+// Stretch: 300 deals, 25 enterprise, $950 ARPA, $400K exit MRR, $4.8M exit ARR, $2.75M cumulative
+const weeklyTargets = { callsPerWeek: 300, emailsPerWeek: 500, linkedinPerWeek: 120, demosPerWeek: 10, dealsPerMonth: 5 };
+// Stretch: 60-80 touches/day = 300-500/week; 8-10 demos/week; 5+ deals/mo from month 1
+
+const monthlyBenchmarks = [
+  { month: "Apr 26", dealsTarget: 5, mrrTarget: 3500, enterprise: 0, milestone: "Onboard; convert 3 free trials; CRM + tools live; 500-contact list built" },
+  { month: "May 26", dealsTarget: 7, mrrTarget: 8000, enterprise: 0, milestone: "Outbound at full velocity; 6 outbound deals; LinkedIn ads launched" },
+  { month: "Jun 26", dealsTarget: 10, mrrTarget: 15000, enterprise: 1, milestone: "First case study; first enterprise deal closed; 2 referral partners signed" },
+  { month: "Jul 26", dealsTarget: 12, mrrTarget: 28000, enterprise: 2, milestone: "AE#1 + SDR#1 hired; 2 enterprise deals; channel partnerships active" },
+  { month: "Aug 26", dealsTarget: 16, mrrTarget: 42000, enterprise: 2, milestone: "Triple outbound volume; 3 referral partners generating leads" },
+  { month: "Sep 26", dealsTarget: 20, mrrTarget: 65000, enterprise: 3, milestone: "Hit $50K+ MRR; paid campaigns scaling; enterprise pipeline >$150K" },
+  { month: "Oct 26", dealsTarget: 25, mrrTarget: 95000, enterprise: 2, milestone: "AE#2 + SDR#2 hired; 150+ active customers; integration partners live" },
+  { month: "Nov 26", dealsTarget: 30, mrrTarget: 135000, enterprise: 3, milestone: "Hit 200 customers; enterprise pipeline >$300K" },
+  { month: "Dec 26", dealsTarget: 35, mrrTarget: 185000, enterprise: 3, milestone: "Hit $150K+ MRR; annual contract push; year-end enterprise sprint" },
+  { month: "Jan 27", dealsTarget: 40, mrrTarget: 245000, enterprise: 3, milestone: "Channel partners 20%+ of pipeline; 3rd enterprise case study" },
+  { month: "Feb 27", dealsTarget: 42, mrrTarget: 320000, enterprise: 3, milestone: "250+ customers; renewals locked; pre-Q4 enterprise acceleration" },
+  { month: "Mar 27", dealsTarget: 45, mrrTarget: 400000, enterprise: 5, milestone: "Year-end sprint; close 5+ enterprise deals; hit $400K MRR / $4.8M ARR" },
+];
+
+const scenarioTargets = {
+  conservative: { deals: 213, enterprise: 5, arpa: 530, exitMRR: 111000, exitARR: 1330000, cumRev: 491000, team: 5, customers: 195 },
+  target:       { deals: 250, enterprise: 15, arpa: 730, exitMRR: 260000, exitARR: 3120000, cumRev: 1750000, team: 7, customers: 250 },
+  stretch:      { deals: 300, enterprise: 25, arpa: 950, exitMRR: 400000, exitARR: 4800000, cumRev: 2750000, team: 10, customers: 300 },
+};
+
+const kpiTargets = {
+  pipelineCoverage: 4,       // 4x pipeline coverage for stretch (aggressive)
+  demosPerWeek: 10,          // 8-10 demos/week per AE (stretch target)
+  trialConversion: 0.45,     // 45%+ trial-to-paid (stretch)
+  monthlyChurn: 0.02,        // <2% monthly (tighter for stretch)
+  cacPaybackSMB: 5,          // <5 months (faster payback)
+  cacPaybackEnterprise: 10,  // <10 months (stretch)
+  mrrGrowthMoM: 0.40,       // 40-60% MoM target (stretch)
+};
+
+// ─── SALES PROCESS STAGES ───
+const salesProcessStages = [
+  { stage: "Lead", activity: "Outbound touch / inbound signup", owner: "SDR", duration: "1–3 days", exitCriteria: "Responds / books demo" },
+  { stage: "Discovery", activity: "Qualify BANT, understand pain", owner: "AE", duration: "1 call", exitCriteria: "Qualified opportunity" },
+  { stage: "Demo", activity: "Product walkthrough, use-case mapping", owner: "AE / Co-founder", duration: "30–45 min", exitCriteria: "Starts trial" },
+  { stage: "Trial", activity: "Guided 14-day trial, weekly check-ins", owner: "AE + CS", duration: "14 days", exitCriteria: "Sees ROI / value" },
+  { stage: "Proposal", activity: "Pricing, contract, negotiation", owner: "AE / Co-founder", duration: "3–7 days", exitCriteria: "Verbal commit" },
+  { stage: "Close", activity: "Contract signed, onboarding begins", owner: "AE", duration: "1–3 days", exitCriteria: "Revenue starts" },
+];
+
+// ─── ENTERPRISE DEAL ECONOMICS ───
+const enterpriseDealEconomics = [
+  { metric: "Monthly Contract Value", smb: "$300–$500", enterprise: "$5,000–$15,000" },
+  { metric: "Annual Contract Value", smb: "$3,600–$6,000", enterprise: "$60,000–$180,000" },
+  { metric: "Sales Cycle", smb: "30–40 days", enterprise: "60–90 days" },
+  { metric: "Deals for $1M ARR", smb: "200+ customers", enterprise: "8–15 customers" },
+];
+
+// ─── ENTERPRISE REVENUE PROJECTION (STRETCH OVERLAY — 25 deals) ───
+const enterpriseProjection = [
+  { quarter: "Q1 (Apr–Jun)", deals: 1, avgMRR: 5000, qRev: 10000, cumRev: 10000 },
+  { quarter: "Q2 (Jul–Sep)", deals: 7, avgMRR: 8000, qRev: 224000, cumRev: 234000 },
+  { quarter: "Q3 (Oct–Dec)", deals: 8, avgMRR: 10000, qRev: 400000, cumRev: 634000 },
+  { quarter: "Q4 (Jan–Mar)", deals: 9, avgMRR: 12000, qRev: 648000, cumRev: 1282000 },
+];
+
+// ─── ICP DEFINITIONS ───
+const icpDefinitions = [
+  { tier: "Primary", label: "Staffing & Recruitment Agencies", size: "10–500 employees", volume: "20+ roles/month", decisionMaker: "CEO/Founder, Head of Delivery, VP Ops", dealSize: "$299–$1,999/mo", pain: "Manual sourcing, slow screening, candidate drop-off" },
+  { tier: "Secondary", label: "Mid-Market with Internal TA", size: "200–2,000 employees", volume: "10–50 roles/quarter", decisionMaker: "CHRO, VP Talent, Head of HR", dealSize: "$899–$2,499+/mo", pain: "High cost-per-hire, slow time-to-fill, poor candidate experience" },
+  { tier: "Enterprise", label: "Revenue Accelerator", size: "2,000+ employees / large staffing (100+ recruiters)", volume: "High-volume", decisionMaker: "CTO, CHRO, VP Digital Transformation", dealSize: "$5,000–$15,000/mo (annual contracts)", pain: "Scale, compliance, AI-driven transformation" },
+];
+
+// ─── SALES TEAM HIRING PLAN ───
+const hiringPlan = [
+  { phase: "Phase 1: Foundation", period: "Apr–Jun 2026", team: "2 Co-founders (active selling) + 1 Sales Lead (ramping)", focus: "Build sales engine, convert free trials, launch outbound", headcount: 3 },
+  { phase: "Phase 2: Scale", period: "Jul–Sep 2026", team: "+AE #1 (US/UK enterprise) + SDR #1 (pipeline gen)", focus: "Sales Lead → full AE + team lead; co-founders shift 50% to enterprise only", headcount: 5 },
+  { phase: "Phase 3: Accelerate", period: "Oct 2026–Mar 2027", team: "+AE #2 (ME/UAE or US) + SDR #2 (double capacity)", focus: "3 AEs + 2 SDRs productive; co-founders on enterprise deals ($5K+) & partnerships", headcount: 7 },
+];
+
+// ─── SALES TOOLS & INFRASTRUCTURE ───
+const salesTools = [
+  { category: "CRM", tool: "HubSpot (Free→Starter)", purpose: "Pipeline, deal tracking, forecasting", priority: "Day 1" },
+  { category: "Outreach", tool: "Apollo.io / Instantly", purpose: "Email sequences, enrichment", priority: "Day 1" },
+  { category: "LinkedIn", tool: "Sales Navigator", purpose: "Prospect research, InMail", priority: "Day 1" },
+  { category: "Enrichment", tool: "Apollo / Clearbit", purpose: "Contact data, company info", priority: "Day 1" },
+  { category: "Scheduling", tool: "Calendly Pro", purpose: "Demo booking, timezone handling", priority: "Day 1" },
+  { category: "Analytics", tool: "HubSpot + GA", purpose: "Pipeline metrics, website tracking", priority: "Week 2" },
+  { category: "Content", tool: "Canva + Loom", purpose: "Sales collateral, async demos", priority: "Week 3" },
+  { category: "Contracts", tool: "PandaDoc / DocuSign", purpose: "Proposals, e-signatures", priority: "Month 2" },
+];
+
+// ─── RISKS & MITIGATIONS ───
+const risksMatrix = [
+  { risk: "Slow enterprise deal cycles", impact: "High", mitigation: "Parallel pipeline of 3x target; founder-led relationship building; offer pilot pricing", owner: "Co-founders" },
+  { risk: "Rep ramp slower than expected", impact: "Medium", mitigation: "Structured 5-week onboarding; co-founder shadow demos; clear KPIs from week 3", owner: "Management" },
+  { risk: "High churn in early customers", impact: "High", mitigation: "Weekly check-ins during first 60 days; dedicated onboarding playbook; feedback loops to product", owner: "CS / Product" },
+  { risk: "Difficulty hiring quality AEs", impact: "Medium", mitigation: "Start recruiting pipeline in May for July hires; consider fractional/contract AEs initially", owner: "Co-founders" },
+  { risk: "Competitive pressure", impact: "Medium", mitigation: "Focus on underserved segments (India staffing, ME corridor); compete on price + AI depth", owner: "Product + Sales" },
+  { risk: "Cash burn exceeds revenue", impact: "Medium", mitigation: "Phase hiring with revenue milestones; keep burn <$25K/mo in Q1, scale with revenue", owner: "Finance" },
+];
+
+// ─── FIRST 30 DAYS ACTION PLAN ───
+const first30Days = [
+  "Convert at least 2 of 3–4 free trial customers to paid by April 15 (early-adopter pricing if needed)",
+  "Set up HubSpot CRM, Apollo.io, and LinkedIn Sales Navigator by April 5 (before rep joins)",
+  "Build first 500-contact prospect list segmented by ICP tier",
+  "Create core sales collateral: one-pager, demo deck, ROI calculator, pricing sheet by geo",
+  "Launch first outbound email sequence (200+ personalized emails targeting India staffing agencies)",
+  "Both co-founders post 2x/week on LinkedIn about AI in recruitment",
+  "Schedule 3–5 enterprise discovery calls from warm network by end of April",
+  "Establish weekly sales standup cadence (every Monday, 30 min) — pipeline, deals, blockers",
+];
+
+// ─── SHARED COMPONENTS ───
+function Modal({ open, onClose, title, children, width }) {
+  if (!open) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }} onClick={onClose}>
+      <div style={{ ...card, padding: 0, width: width || 520, maxWidth: "95vw", maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid #E5E7EB" }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: C.d }}>{title}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.g, padding: 4 }}>x</button>
+        </div>
+        <div style={{ padding: 24 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (<div style={{ marginBottom: 14 }}><label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.g, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</label>{children}</div>);
+}
+
+function MetricCard({ label, value, target, unit, trend, color }) {
+  const pct = target ? Math.round((value / target) * 100) : null;
+  const good = pct === null || pct >= 80;
+  return (
+    <div style={{ ...card, padding: "18px 22px", minWidth: 0 }}>
+      <div style={{ fontSize: 12, color: C.g, fontWeight: 500, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span style={{ fontSize: 26, fontWeight: 700, color: color || C.d }}>{unit === "$" ? `$${value.toLocaleString()}` : value.toLocaleString()}</span>
+        {target != null && <span style={{ fontSize: 12, color: C.g }}>/ {unit === "$" ? `$${target.toLocaleString()}` : target}</span>}
+      </div>
+      {pct !== null && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ height: 5, background: "#E5E7EB", borderRadius: 3, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${Math.min(pct, 100)}%`, background: good ? C.ok : pct >= 50 ? C.warn : C.bad, borderRadius: 3, transition: "width 0.5s" }} />
+          </div>
+          <div style={{ fontSize: 11, color: good ? C.ok : pct >= 50 ? C.warn : C.bad, marginTop: 3, fontWeight: 600 }}>{pct}%</div>
+        </div>
+      )}
+      {trend && <div style={{ fontSize: 12, color: C.g, marginTop: 4 }}>{trend}</div>}
+    </div>
+  );
+}
+
+function StageBadge({ stage }) {
+  return <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: SBG[stage], color: SC[stage] }}>{stage}</span>;
+}
+
+// ═══════════════════════════════════════════════════
+//  MAIN APP — SHARED STATE + ROLE SWITCHER
+// ═══════════════════════════════════════════════════
+function App() {
+  // ─── ROLE from window._ROLE (set by host HTML page) ───
+  const ROLE = (typeof window !== "undefined" && window._ROLE) || "manager";
+  const isManager = ROLE === "manager";
+
+  // ─── LOCAL-STORAGE HELPERS ───
+  const LS_KEY = "thh_sales_dashboard_v2";
+  const loadLS = () => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) { return null; }
+  };
+  const initial = loadLS();
+
+  // ─── SHARED STATE (persisted to localStorage) ───
+  const [pipeline, setPipeline] = useState((initial && initial.pipeline) || initPipeline);
+  const [weeklyReports, setWeeklyReports] = useState((initial && initial.weeklyReports) || initWeeklyReports);
+  const [onboarding, setOnboarding] = useState((initial && initial.onboarding) || initOnboarding);
+  const [messages, setMessages] = useState((initial && initial.messages) || initMessages);
+  const [notes, setNotes] = useState((initial && initial.notes) || initNotes);
+
+  // ─── PERSIST ON CHANGE ───
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({ pipeline, weeklyReports, onboarding, messages, notes }));
+    } catch (e) { /* ignore quota errors */ }
+  }, [pipeline, weeklyReports, onboarding, messages, notes]);
+
+  // ─── CROSS-TAB SYNC via storage events ───
+  React.useEffect(() => {
+    const handler = (ev) => {
+      if (ev.key !== LS_KEY || !ev.newValue) return;
+      try {
+        const d = JSON.parse(ev.newValue);
+        if (d.pipeline) setPipeline(d.pipeline);
+        if (d.weeklyReports) setWeeklyReports(d.weeklyReports);
+        if (d.onboarding) setOnboarding(d.onboarding);
+        if (d.messages) setMessages(d.messages);
+        if (d.notes) setNotes(d.notes);
+      } catch (e) { /* ignore parse errors */ }
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+
+  // ─── RESET TO DAY 1 ───
+  const resetAll = () => {
+    if (!window.confirm("Reset all data back to Day 1 (Apr 10, 2026)? This will clear pipeline, reports, onboarding progress, messages and notes across BOTH dashboards.")) return;
+    setPipeline(initPipeline);
+    setWeeklyReports(initWeeklyReports);
+    setOnboarding(initOnboarding);
+    setMessages(initMessages);
+    setNotes(initNotes);
+  };
+
+  const nextId = (arr) => Math.max(0, ...arr.map((x) => x.id)) + 1;
+
+  // ─── SHARED COMPUTED ───
+  const submitted = weeklyReports.filter((r) => r.submitted);
+  const metrics = useMemo(() => {
+    const tc = submitted.reduce((s, r) => s + r.calls, 0);
+    const te = submitted.reduce((s, r) => s + r.emails, 0);
+    const td = submitted.reduce((s, r) => s + r.demosDone, 0);
+    const active = pipeline.filter((d) => d.stage !== "Closed" && d.stage !== "Lost");
+    const pv = active.reduce((s, d) => s + d.value, 0);
+    const cm = pipeline.filter((d) => d.stage === "Closed").reduce((s, d) => s + d.value, 0);
+    const won = pipeline.filter((d) => d.stage === "Closed").length;
+    return { tc, te, td, active, pv, cm, won, weeks: submitted.length };
+  }, [submitted, pipeline]);
+
+  const otherHref = isManager ? "rep.html" : "manager.html";
+  const otherLabel = isManager ? "Switch to Rep View" : "Switch to Manager View";
+  const barColor = isManager ? C.pri : C.teal;
+  const barLabel = isManager ? "MANAGER DASHBOARD" : "REP DASHBOARD";
+  const barSub = isManager ? "Full CRUD · You can see everything" : "Focused workspace · Your pipeline, reports, onboarding & messages";
+
+  return (
+    <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", background: "#F9FAFB", minHeight: "100vh" }}>
+
+      {/* ─── ROLE HEADER BAR ─── */}
+      <div style={{ background: C.d, padding: "12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, borderBottom: `3px solid ${barColor}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: barColor, boxShadow: `0 0 12px ${barColor}` }}></div>
+          <div>
+            <div style={{ color: C.w, fontSize: 13, fontWeight: 700, letterSpacing: "0.08em" }}>{barLabel}</div>
+            <div style={{ color: "#9CA3AF", fontSize: 11, marginTop: 1 }}>{barSub}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={resetAll} title="Reset all data to Day 1" style={{
+            padding: "7px 14px", borderRadius: 8, border: "1px solid #374151", cursor: "pointer",
+            background: "transparent", color: "#9CA3AF", fontWeight: 600, fontSize: 12,
+          }}>Reset Day 1</button>
+          <a href={otherHref} style={{
+            padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
+            background: barColor, color: C.w, fontWeight: 700, fontSize: 13, textDecoration: "none",
+            display: "inline-flex", alignItems: "center", gap: 6,
+          }}>{otherLabel} →</a>
+        </div>
+      </div>
+
+      {isManager ? (
+        <AdminView
+          pipeline={pipeline} setPipeline={setPipeline}
+          weeklyReports={weeklyReports} setWeeklyReports={setWeeklyReports}
+          onboarding={onboarding} setOnboarding={setOnboarding}
+          messages={messages} setMessages={setMessages}
+          notes={notes} setNotes={setNotes}
+          metrics={metrics} submitted={submitted} nextId={nextId}
+        />
+      ) : (
+        <SalesLeadView
+          pipeline={pipeline}
+          weeklyReports={weeklyReports} setWeeklyReports={setWeeklyReports}
+          onboarding={onboarding} setOnboarding={setOnboarding}
+          messages={messages}
+          metrics={metrics} submitted={submitted}
+        />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+//  REP VIEW — RESTRICTED
+// ═══════════════════════════════════════════════════
+function SalesLeadView({ pipeline, weeklyReports, setWeeklyReports, onboarding, setOnboarding, messages, metrics, submitted }) {
+  const [tab, setTab] = useState("home");
+  const [reportModal, setReportModal] = useState({ open: false, report: null });
+
+  const toggleTask = (weekIdx, taskId) => {
+    setOnboarding((ob) => ob.map((w, i) => i === weekIdx ? { ...w, tasks: w.tasks.map((t) => t.id === taskId ? { ...t, done: !t.done } : t) } : w));
+  };
+
+  const saveReport = (r) => {
+    setWeeklyReports((a) => a.map((x) => x.id === r.id ? { ...r, submitted: true } : x));
+    setReportModal({ open: false, report: null });
+  };
+
+  const pendingReport = weeklyReports.find((r) => !r.submitted);
+  const unreadMessages = messages.filter((m) => true).length;
+  const obTotal = onboarding.reduce((s, w) => s + w.tasks.length, 0);
+  const obDone = onboarding.reduce((s, w) => s + w.tasks.filter((t) => t.done).length, 0);
+  const obPct = obTotal ? Math.round((obDone / obTotal) * 100) : 0;
+
+  const tabs = [
+    { id: "home", label: "Home" },
+    { id: "report", label: pendingReport ? "Submit Report" : "Weekly Reports" },
+    { id: "onboarding", label: "My Onboarding" },
+    { id: "pipeline", label: "My Pipeline" },
+    { id: "messages", label: `Messages (${unreadMessages})` },
+  ];
+
+  const stageData = useMemo(() => STAGES.slice(0, 6).map((s) => ({ stage: s, count: pipeline.filter((d) => d.stage === s).length })), [pipeline]);
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg, #0F766E 0%, #14B8A6 50%, #2DD4BF 100%)", padding: "24px 32px 18px", color: C.w }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", opacity: 0.7, marginBottom: 4 }}>TheHireHub.AI · Sales Dashboard</div>
+              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>Welcome, Rep</h1>
+              <div style={{ marginTop: 4, fontSize: 14, opacity: 0.85 }}>Week {submitted.length + 1} of onboarding · {obPct}% onboarding complete</div>
+            </div>
+            {pendingReport && (
+              <button onClick={() => setReportModal({ open: true, report: pendingReport })} style={{
+                padding: "10px 20px", borderRadius: 10, border: "2px solid rgba(255,255,255,0.4)",
+                background: "rgba(255,255,255,0.15)", color: C.w, fontWeight: 700, fontSize: 14, cursor: "pointer",
+                animation: "pulse 2s infinite",
+              }}>
+                Submit Week {submitted.length + 1} Report
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 4, marginTop: 16 }}>
+            {tabs.map((t) => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{
+                padding: "8px 18px", borderRadius: "8px 8px 0 0", border: "none", cursor: "pointer",
+                background: tab === t.id ? C.w : "rgba(255,255,255,0.08)",
+                color: tab === t.id ? C.teal : "rgba(255,255,255,0.8)",
+                fontWeight: 600, fontSize: 13, transition: "all 0.2s",
+              }}>{t.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 32px 48px" }}>
+
+        {/* ─── HOME ─── */}
+        {tab === "home" && (<div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 24 }}>
+            <MetricCard label="Deals Won" value={metrics.won} target={5} color={C.ok} trend="April stretch target" />
+            <MetricCard label="My MRR" value={metrics.cm} target={3500} unit="$" color={C.teal} />
+            <MetricCard label="Open Pipeline" value={metrics.pv} unit="$" color={C.pur} trend={`${metrics.active.length} deals`} />
+            <MetricCard label="Total Demos" value={metrics.td} target={submitted.length * 5} color={C.info} />
+            <MetricCard label="Onboarding" value={obPct} target={100} color={C.pri} trend={`${obDone}/${obTotal} tasks`} />
+          </div>
+
+          {/* Pending report alert */}
+          {pendingReport && (
+            <div style={{ ...card, padding: 20, marginBottom: 20, borderLeft: `5px solid ${C.warn}`, background: "#FFFBEB" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#92400E", fontSize: 15 }}>Weekly Report Due</div>
+                  <div style={{ fontSize: 14, color: "#92400E", marginTop: 2 }}>{pendingReport.weekLabel} — Please submit your numbers and highlights.</div>
+                </div>
+                <button onClick={() => setReportModal({ open: true, report: pendingReport })} style={btnS(C.warn, true)}>Submit Now</button>
+              </div>
+            </div>
+          )}
+
+          {/* Latest message from Management */}
+          {messages.length > 0 && (
+            <div style={{ ...card, padding: 20, marginBottom: 20, borderLeft: `5px solid ${C.pri}` }}>
+              <div style={{ fontSize: 12, color: C.g, marginBottom: 4 }}>Latest from Management · {messages[messages.length - 1].date}</div>
+              <div style={{ fontSize: 15, color: C.d, lineHeight: 1.5 }}>{messages[messages.length - 1].text}</div>
+            </div>
+          )}
+
+          {/* This week's onboarding focus */}
+          {(() => {
+            const cw = onboarding.find((w) => w.tasks.some((t) => !t.done)) || onboarding[onboarding.length - 1];
+            const cwi = onboarding.indexOf(cw);
+            if (!cw) return null;
+            const wd = cw.tasks.filter((t) => t.done).length;
+            return (
+              <div style={{ ...card, padding: 20 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: C.d, marginBottom: 12 }}>This Week: {cw.title} ({wd}/{cw.tasks.length} done)</div>
+                {cw.tasks.map((t) => (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0" }}>
+                    <div onClick={() => toggleTask(cwi, t.id)} style={{
+                      width: 22, height: 22, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center",
+                      background: t.done ? C.ok : "transparent", border: t.done ? "none" : "2px solid #D1D5DB",
+                      color: C.w, fontSize: 14, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+                    }}>{t.done && "✓"}</div>
+                    <span style={{ fontSize: 14, color: t.done ? C.g : C.d, textDecoration: t.done ? "line-through" : "none" }}>{t.task}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>)}
+
+        {/* ─── WEEKLY REPORT ─── */}
+        {tab === "report" && (<div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20, color: C.d }}>Weekly Reports</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Submit every week before Monday standup. You can edit until Management reviews.</p>
+            </div>
+            {pendingReport && <button onClick={() => setReportModal({ open: true, report: pendingReport })} style={btnS(C.teal, true)}>Submit {pendingReport.weekLabel}</button>}
+          </div>
+
+          {[...weeklyReports].reverse().map((r) => (
+            <div key={r.id} style={{ ...card, padding: 20, marginBottom: 14, opacity: r.submitted ? 1 : 0.7, borderLeft: r.submitted ? `4px solid ${C.ok}` : `4px solid ${C.warn}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: C.d }}>{r.weekLabel}</div>
+                <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 20,
+                  background: r.submitted ? "#D1FAE5" : "#FDE68A", color: r.submitted ? "#065F46" : "#92400E" }}>
+                  {r.submitted ? "SUBMITTED" : "PENDING"}
+                </span>
+              </div>
+              {r.submitted ? (
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 10, marginBottom: 12 }}>
+                    {[
+                      { l: "Calls", v: r.calls, t: weeklyTargets.callsPerWeek },
+                      { l: "Emails", v: r.emails, t: weeklyTargets.emailsPerWeek },
+                      { l: "LinkedIn", v: r.linkedin, t: weeklyTargets.linkedinPerWeek },
+                      { l: "Demos Done", v: r.demosDone, t: weeklyTargets.demosPerWeek },
+                      { l: "Proposals", v: r.proposals },
+                      { l: "Closed", v: r.closed },
+                    ].map((x, i) => (
+                      <div key={i} style={{ textAlign: "center", padding: 8, background: "#F9FAFB", borderRadius: 8 }}>
+                        <div style={{ fontSize: 11, color: C.g, textTransform: "uppercase" }}>{x.l}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: x.t ? (x.v >= x.t ? C.ok : C.bad) : C.d }}>{x.v}</div>
+                        {x.t && <div style={{ fontSize: 10, color: C.g }}>target: {x.t}</div>}
+                      </div>
+                    ))}
+                  </div>
+                  {r.topWin && <div style={{ fontSize: 14, color: C.d, marginBottom: 4 }}><strong>Top Win:</strong> {r.topWin}</div>}
+                  {r.blockers && <div style={{ fontSize: 14, color: C.bad, marginBottom: 4 }}><strong>Blockers:</strong> {r.blockers}</div>}
+                  {r.plan && <div style={{ fontSize: 14, color: C.pri }}><strong>Next Week Plan:</strong> {r.plan}</div>}
+                </div>
+              ) : (
+                <button onClick={() => setReportModal({ open: true, report: r })} style={btnS(C.teal, true)}>Fill & Submit</button>
+              )}
+            </div>
+          ))}
+        </div>)}
+
+        {/* ─── ONBOARDING (tick only) ─── */}
+        {tab === "onboarding" && (<div>
+          <h2 style={{ margin: "0 0 4px", fontSize: 20, color: C.d }}>My Onboarding Journey</h2>
+          <p style={{ margin: "0 0 20px", fontSize: 14, color: C.g }}>Tick off tasks as you complete them. Management manages the task list.</p>
+
+          <div style={{ ...card, padding: 20, marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <span style={{ fontSize: 14, color: C.g }}>{onboarding.reduce((s, w) => s + w.tasks.filter((t) => t.done).length, 0)} of {onboarding.reduce((s, w) => s + w.tasks.length, 0)} completed</span>
+              <span style={{ fontSize: 20, fontWeight: 700, color: C.teal }}>{onboarding.reduce((s, w) => s + w.tasks.length, 0) ? Math.round(onboarding.reduce((s, w) => s + w.tasks.filter((t) => t.done).length, 0) / onboarding.reduce((s, w) => s + w.tasks.length, 0) * 100) : 0}%</span>
+            </div>
+            <div style={{ height: 10, background: "#E5E7EB", borderRadius: 5, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${onboarding.reduce((s, w) => s + w.tasks.length, 0) ? Math.round(onboarding.reduce((s, w) => s + w.tasks.filter((t) => t.done).length, 0) / onboarding.reduce((s, w) => s + w.tasks.length, 0) * 100) : 0}%`, background: `linear-gradient(90deg, ${C.teal}, ${C.ok})`, borderRadius: 5 }} />
+            </div>
+          </div>
+
+          {onboarding.map((week, wi) => {
+            const wd = week.tasks.filter((t) => t.done).length;
+            const isActive = week.tasks.some((t) => !t.done) && (wi === 0 || onboarding[wi - 1].tasks.every((t) => t.done) || onboarding[wi - 1].tasks.some((t) => !t.done));
+            const isCurrent = onboarding.findIndex((w) => w.tasks.some((t) => !t.done)) === wi;
+            return (
+              <div key={week.week} style={{
+                ...card, padding: 20, marginBottom: 14,
+                border: isCurrent ? `2px solid ${C.teal}` : "1px solid #E5E7EB",
+                background: isCurrent ? "#F0FDFA" : C.w,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: 15, color: C.d }}>Week {week.week}: {week.title}</span>
+                    {isCurrent && <span style={{ fontSize: 11, background: C.teal, color: C.w, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>THIS WEEK</span>}
+                    {wd === week.tasks.length && <span style={{ fontSize: 11, background: C.ok, color: C.w, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>COMPLETE</span>}
+                  </div>
+                  <span style={{ fontSize: 12, color: C.g }}>{week.startDate} – {week.endDate} · {wd}/{week.tasks.length}</span>
+                </div>
+                {week.tasks.map((t) => (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
+                    <div onClick={() => toggleTask(wi, t.id)} style={{
+                      width: 24, height: 24, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
+                      background: t.done ? C.ok : "transparent", border: t.done ? "none" : "2px solid #D1D5DB",
+                      color: C.w, fontSize: 14, fontWeight: 700, cursor: "pointer", flexShrink: 0, transition: "all 0.15s",
+                    }}>{t.done && "✓"}</div>
+                    <span style={{ fontSize: 14, color: t.done ? C.g : C.d, textDecoration: t.done ? "line-through" : "none" }}>{t.task}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>)}
+
+        {/* ─── PIPELINE (read only) ─── */}
+        {tab === "pipeline" && (<div>
+          <h2 style={{ margin: "0 0 4px", fontSize: 20, color: C.d }}>My Deal Pipeline</h2>
+          <p style={{ margin: "0 0 20px", fontSize: 14, color: C.g }}>View your deals. Pipeline is managed centrally — update your CRM and it'll reflect here.</p>
+
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            {[
+              { l: "Open Deals", v: metrics.active.length, c: C.teal },
+              { l: "Pipeline MRR", v: `$${metrics.pv.toLocaleString()}`, c: C.pur },
+              { l: "Won MRR", v: `$${metrics.cm.toLocaleString()}`, c: C.ok },
+            ].map((x, i) => (
+              <div key={i} style={{ ...card, padding: "8px 18px", textAlign: "center" }}>
+                <div style={{ fontSize: 11, color: C.g, textTransform: "uppercase" }}>{x.l}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: x.c }}>{x.v}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                <thead>
+                  <tr style={{ background: "#F9FAFB" }}>
+                    {["Company", "Segment", "Geo", "Stage", "MRR", "Days in Stage", "Next Step"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...pipeline].sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage)).map((d) => (
+                    <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                      <td style={{ padding: "12px 14px", fontWeight: 600, color: C.d }}>{d.company}</td>
+                      <td style={{ padding: "12px 14px", color: C.g }}>{d.segment}</td>
+                      <td style={{ padding: "12px 14px", color: C.g }}>{d.geo}</td>
+                      <td style={{ padding: "12px 14px" }}><StageBadge stage={d.stage} /></td>
+                      <td style={{ padding: "12px 14px", fontWeight: 600, color: C.teal }}>${d.value.toLocaleString()}/mo</td>
+                      <td style={{ padding: "12px 14px", color: d.daysInStage > 7 ? C.bad : C.g }}>{d.stage === "Closed" ? "—" : `${d.daysInStage}d`}</td>
+                      <td style={{ padding: "12px 14px", color: C.g, fontStyle: "italic" }}>{d.nextStep}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>)}
+
+        {/* ─── MESSAGES (read only) ─── */}
+        {tab === "messages" && (<div>
+          <h2 style={{ margin: "0 0 4px", fontSize: 20, color: C.d }}>Messages from Management</h2>
+          <p style={{ margin: "0 0 20px", fontSize: 14, color: C.g }}>Targets, feedback, and action items from management.</p>
+          {messages.length === 0 && <div style={{ ...card, padding: 40, textAlign: "center", color: C.g }}>No messages yet.</div>}
+          {[...messages].reverse().map((m) => (
+            <div key={m.id} style={{
+              ...card, padding: 20, marginBottom: 14,
+              borderLeft: `5px solid ${m.type === "kudos" ? C.ok : m.type === "action" ? C.warn : C.pri}`,
+              background: m.type === "kudos" ? "#F0FDF4" : m.type === "action" ? "#FFFBEB" : "#EEF2FF",
+            }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 6,
+                  background: m.type === "kudos" ? "#D1FAE5" : m.type === "action" ? "#FDE68A" : "#C7D2FE",
+                  color: m.type === "kudos" ? "#065F46" : m.type === "action" ? "#92400E" : "#3730A3" }}>
+                  {m.type === "kudos" ? "KUDOS" : m.type === "action" ? "ACTION REQUIRED" : "TARGET"}
+                </span>
+                <span style={{ fontSize: 13, color: C.g }}>{m.date}</span>
+              </div>
+              <div style={{ fontSize: 15, color: C.d, lineHeight: 1.6 }}>{m.text}</div>
+            </div>
+          ))}
+        </div>)}
+
+        <div style={{ marginTop: 40, paddingTop: 16, borderTop: "1px solid #E5E7EB", textAlign: "center", fontSize: 12, color: C.g }}>
+          TheHireHub.AI · Sales Dashboard · Submit your weekly report before Monday standup
+        </div>
+      </div>
+
+      {/* Report Modal */}
+      <WeeklyReportForm open={reportModal.open} report={reportModal.report} onClose={() => setReportModal({ open: false, report: null })} onSave={saveReport} />
+    </div>
+  );
+}
+
+// ─── Weekly Report Form (Rep submits) ───
+function WeeklyReportForm({ open, report, onClose, onSave }) {
+  const [f, setF] = useState(report || {});
+  if (!open || !report) return null;
+  const n = (label, key) => (
+    <Field label={label}><input style={inp} type="number" min="0" value={f[key] || 0} onChange={(e) => setF({ ...f, [key]: parseInt(e.target.value) || 0 })} /></Field>
+  );
+  return (
+    <Modal open={open} onClose={onClose} title={`Submit: ${report.weekLabel}`} width={580}>
+      <div style={{ padding: "10px 14px", background: "#F0FDFA", borderRadius: 8, marginBottom: 16, fontSize: 13, color: "#0F766E" }}>
+        Fill in your numbers honestly. Management reviews these before Monday standup.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+        {n("Calls Made", "calls")}{n("Emails Sent", "emails")}{n("LinkedIn Touches", "linkedin")}{n("Demos Booked", "demosBooked")}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        {n("Demos Done", "demosDone")}{n("Proposals Sent", "proposals")}{n("Deals Closed", "closed")}
+      </div>
+      <Field label="Top Win This Week"><input style={inp} value={f.topWin || ""} onChange={(e) => setF({ ...f, topWin: e.target.value })} placeholder="Your biggest accomplishment..." /></Field>
+      <Field label="Blockers / Challenges"><textarea style={{ ...inp, height: 60, resize: "vertical" }} value={f.blockers || ""} onChange={(e) => setF({ ...f, blockers: e.target.value })} placeholder="What's slowing you down?" /></Field>
+      <Field label="Plan for Next Week"><textarea style={{ ...inp, height: 60, resize: "vertical" }} value={f.plan || ""} onChange={(e) => setF({ ...f, plan: e.target.value })} placeholder="Your priorities for next week..." /></Field>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+        <button onClick={onClose} style={btnS(C.g, false)}>Cancel</button>
+        <button onClick={() => onSave(f)} style={btnS("#0F766E", true)}>Submit Report</button>
+      </div>
+    </Modal>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════
+//  MANAGER VIEW — FULL ADMIN
+// ═══════════════════════════════════════════════════
+function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onboarding, setOnboarding, messages, setMessages, notes, setNotes, metrics, submitted, nextId }) {
+  const [tab, setTab] = useState("overview");
+  const [dealModal, setDealModal] = useState({ open: false, deal: null });
+  const [msgModal, setMsgModal] = useState({ open: false, msg: null });
+  const [noteModal, setNoteModal] = useState({ open: false, note: null });
+  const [taskModal, setTaskModal] = useState({ open: false, weekIdx: null });
+  const [confirmDel, setConfirmDel] = useState({ open: false, type: null, id: null, extra: null });
+
+  // DEAL CRUD
+  const saveDeal = (d) => { if (d.id) setPipeline((p) => p.map((x) => x.id === d.id ? d : x)); else setPipeline((p) => [...p, { ...d, id: nextId(p) }]); setDealModal({ open: false, deal: null }); };
+  const deleteDeal = (id) => { setPipeline((p) => p.filter((x) => x.id !== id)); setConfirmDel({ open: false }); };
+
+  // MESSAGE CRUD (Rep sees these)
+  const emptyMsg = { date: new Date().toISOString().slice(0, 10), text: "", type: "target" };
+  const saveMsg = (m) => { if (m.id) setMessages((a) => a.map((x) => x.id === m.id ? m : x)); else setMessages((a) => [...a, { ...m, id: nextId(a), from: "Management" }]); setMsgModal({ open: false, msg: null }); };
+  const deleteMsg = (id) => { setMessages((a) => a.filter((x) => x.id !== id)); setConfirmDel({ open: false }); };
+
+  // NOTE CRUD (only Admin sees)
+  const saveNote = (n) => { if (n.id) setNotes((a) => a.map((x) => x.id === n.id ? n : x)); else setNotes((a) => [...a, { ...n, id: nextId(a) }]); setNoteModal({ open: false, note: null }); };
+  const deleteNote = (id) => { setNotes((a) => a.filter((x) => x.id !== id)); setConfirmDel({ open: false }); };
+
+  // ONBOARDING CRUD
+  const addTask = (weekIdx, taskText) => {
+    setOnboarding((ob) => ob.map((w, i) => i === weekIdx ? { ...w, tasks: [...w.tasks, { id: `${w.week}-${Date.now()}`, task: taskText, done: false }] } : w));
+    setTaskModal({ open: false, weekIdx: null });
+  };
+  const removeTask = (weekIdx, taskId) => {
+    setOnboarding((ob) => ob.map((w, i) => i === weekIdx ? { ...w, tasks: w.tasks.filter((t) => t.id !== taskId) } : w));
+  };
+
+  const stageData = useMemo(() => STAGES.slice(0, 6).map((s) => ({ stage: s, count: pipeline.filter((d) => d.stage === s).length })), [pipeline]);
+  const geoData = useMemo(() => { const g = {}; pipeline.forEach((d) => { if (!g[d.geo]) g[d.geo] = { count: 0, value: 0 }; g[d.geo].count++; g[d.geo].value += d.value; }); return Object.entries(g).map(([name, data]) => ({ name, ...data })); }, [pipeline]);
+  const activityTrend = submitted.map((r) => ({ week: r.weekLabel.replace(/Week (\d).*/, "W$1"), Calls: r.calls, Emails: r.emails, LinkedIn: r.linkedin }));
+
+  const obTotal = onboarding.reduce((s, w) => s + w.tasks.length, 0);
+  const obDone = onboarding.reduce((s, w) => s + w.tasks.filter((t) => t.done).length, 0);
+
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "benchmarks", label: "GTM Benchmarks" },
+    { id: "pipeline", label: "Pipeline" },
+    { id: "reports", label: "Weekly Reports" },
+    { id: "onboarding", label: "Onboarding" },
+    { id: "messages", label: "Messages to Rep" },
+    { id: "notes", label: "Private Notes" },
+  ];
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg, #1E1B4B 0%, #4F46E5 50%, #7C3AED 100%)", padding: "24px 32px 18px", color: C.w }}>
+        <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", opacity: 0.7, marginBottom: 4 }}>TheHireHub.AI · Sales Management</div>
+              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>Command Center</h1>
+              <div style={{ marginTop: 4, fontSize: 14, opacity: 0.8 }}>Monitoring Rep · Stretch targets active · {submitted.length} weekly reports received</div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", opacity: 0.7 }}>Won</div>
+                <div style={{ fontSize: 20, fontWeight: 800 }}>{metrics.won}/4</div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", opacity: 0.7 }}>MRR</div>
+                <div style={{ fontSize: 20, fontWeight: 800 }}>${metrics.cm.toLocaleString()}</div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: 10, padding: "8px 14px", textAlign: "center" }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", opacity: 0.7 }}>Onboarding</div>
+                <div style={{ fontSize: 20, fontWeight: 800 }}>{obTotal ? Math.round(obDone / obTotal * 100) : 0}%</div>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 4, marginTop: 16, flexWrap: "wrap" }}>
+            {tabs.map((t) => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{
+                padding: "8px 18px", borderRadius: "8px 8px 0 0", border: "none", cursor: "pointer",
+                background: tab === t.id ? C.w : "rgba(255,255,255,0.08)",
+                color: tab === t.id ? C.pri : "rgba(255,255,255,0.8)",
+                fontWeight: 600, fontSize: 13, transition: "all 0.2s",
+              }}>{t.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 32px 48px" }}>
+
+        {/* ── OVERVIEW ── */}
+        {tab === "overview" && (<div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 24 }}>
+            <MetricCard label="Deals Won (Apr)" value={metrics.won} target={5} color={C.ok} />
+            <MetricCard label="Closed MRR" value={metrics.cm} target={3500} unit="$" color={C.pri} />
+            <MetricCard label="Active Pipeline" value={metrics.pv} unit="$" color={C.pur} trend={`${metrics.active.length} open`} />
+            <MetricCard label="Total Demos" value={metrics.td} target={submitted.length * 5} color={C.info} />
+            <MetricCard label="Reports Received" value={submitted.length} color={C.teal} trend={weeklyReports.some((r) => !r.submitted) ? "1 pending" : "All in"} />
+            <MetricCard label="Onboarding" value={obDone} target={obTotal} color={C.pur} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 24 }}>
+            <div style={{ ...card, padding: 24 }}>
+              <h3 style={{ margin: "0 0 14px", fontSize: 16, color: C.d }}>Weekly Activity Trend</h3>
+              {activityTrend.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={activityTrend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                    <XAxis dataKey="week" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip /><Legend />
+                    <Bar dataKey="Calls" fill={C.pri} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Emails" fill={C.warn} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="LinkedIn" fill={C.teal} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <div style={{ padding: 40, textAlign: "center", color: C.g }}>No reports yet</div>}
+            </div>
+            <div style={{ ...card, padding: 24 }}>
+              <h3 style={{ margin: "0 0 14px", fontSize: 16, color: C.d }}>Pipeline by Geo</h3>
+              <ResponsiveContainer width="100%" height={170}>
+                <PieChart>
+                  <Pie data={geoData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65} innerRadius={35} paddingAngle={3}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} style={{ fontSize: 11 }}>
+                    {geoData.map((_, i) => <Cell key={i} fill={[C.pri, C.warn, C.ok, C.bad][i % 4]} />)}
+                  </Pie>
+                  <Tooltip formatter={(v) => `$${v.toLocaleString()}/mo`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 24 }}>
+            <button onClick={() => { setTab("messages"); setMsgModal({ open: true, msg: null }); }} style={{ ...card, padding: 18, cursor: "pointer", textAlign: "center", border: "2px dashed #C7D2FE" }}>
+              <div style={{ fontSize: 20, marginBottom: 4 }}>+</div>
+              <div style={{ fontWeight: 600, color: C.pri }}>Send Message to Rep</div>
+              <div style={{ fontSize: 12, color: C.g }}>Targets, feedback, action items</div>
+            </button>
+            <button onClick={() => { setTab("pipeline"); setDealModal({ open: true, deal: null }); }} style={{ ...card, padding: 18, cursor: "pointer", textAlign: "center", border: "2px dashed #A7F3D0" }}>
+              <div style={{ fontSize: 20, marginBottom: 4 }}>+</div>
+              <div style={{ fontWeight: 600, color: C.ok }}>Add Deal to Pipeline</div>
+              <div style={{ fontSize: 12, color: C.g }}>Track a new opportunity</div>
+            </button>
+            <button onClick={() => { setTab("notes"); setNoteModal({ open: true, note: null }); }} style={{ ...card, padding: 18, cursor: "pointer", textAlign: "center", border: "2px dashed #FDE68A" }}>
+              <div style={{ fontSize: 20, marginBottom: 4 }}>+</div>
+              <div style={{ fontWeight: 600, color: C.warn }}>Add Private Note</div>
+              <div style={{ fontSize: 12, color: C.g }}>Only you can see these</div>
+            </button>
+          </div>
+
+          {/* Latest notes */}
+          {notes.length > 0 && (
+            <div style={{ ...card, padding: 20 }}>
+              <h3 style={{ margin: "0 0 12px", fontSize: 16, color: C.d }}>Your Latest Notes</h3>
+              {notes.slice(-2).reverse().map((n) => (
+                <div key={n.id} style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 8, borderLeft: `4px solid ${n.type === "positive" ? C.ok : n.type === "action" ? C.warn : C.bad}`, background: n.type === "positive" ? "#F0FDF4" : n.type === "action" ? "#FFFBEB" : "#FEF2F2" }}>
+                  <span style={{ fontSize: 11, color: C.g }}>{n.date} · {n.type.toUpperCase()}</span>
+                  <div style={{ fontSize: 14, color: C.d, marginTop: 2 }}>{n.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>)}
+
+        {/* ── GTM BENCHMARKS ── */}
+        {tab === "benchmarks" && (<div>
+          <h2 style={{ margin: "0 0 4px", fontSize: 20, color: C.d }}>FY27 GTM Benchmarks — Stretch Case</h2>
+          <p style={{ margin: "0 0 20px", fontSize: 14, color: C.g }}>All targets set to Stretch: 300 deals, 25 enterprise, $950 ARPA, $400K exit MRR, $4.8M ARR, $2.75M cumulative.</p>
+
+          {/* Scenario cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 24 }}>
+            {[
+              { label: "Conservative (Base)", data: scenarioTargets.conservative, color: C.g, bg: "#F9FAFB" },
+              { label: "Target Case", data: scenarioTargets.target, color: C.g, bg: "#F9FAFB" },
+              { label: "STRETCH CASE (ACTIVE)", data: scenarioTargets.stretch, color: C.pur, bg: "#F5F3FF" },
+            ].map((s, i) => (
+              <div key={i} style={{ ...card, padding: 18, background: s.bg, borderColor: i === 2 ? C.pur : "#E5E7EB", borderWidth: i === 2 ? 3 : 1, position: "relative" }}>
+                {i === 2 && <div style={{ position: "absolute", top: -10, right: 16, background: C.pur, color: C.w, fontSize: 10, fontWeight: 800, padding: "2px 10px", borderRadius: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Active Target</div>}
+                <div style={{ fontWeight: 700, fontSize: 14, color: s.color, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>{s.label}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13 }}>
+                  <div><span style={{ color: C.g }}>SMB Deals:</span> <strong>{s.data.deals}</strong></div>
+                  <div><span style={{ color: C.g }}>Enterprise:</span> <strong>{s.data.enterprise}</strong></div>
+                  <div><span style={{ color: C.g }}>ARPA:</span> <strong>${s.data.arpa}</strong></div>
+                  <div><span style={{ color: C.g }}>Customers:</span> <strong>{s.data.customers}</strong></div>
+                  <div><span style={{ color: C.g }}>Exit MRR:</span> <strong>${(s.data.exitMRR / 1000).toFixed(0)}K</strong></div>
+                  <div><span style={{ color: C.g }}>Exit ARR:</span> <strong>${(s.data.exitARR / 1000000).toFixed(2)}M</strong></div>
+                  <div style={{ gridColumn: "1 / -1" }}><span style={{ color: C.g }}>Cumulative Rev:</span> <strong style={{ color: s.color, fontSize: 16 }}>${s.data.cumRev >= 1000000 ? (s.data.cumRev / 1000000).toFixed(1) + "M" : (s.data.cumRev / 1000).toFixed(0) + "K"}</strong></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Monthly roadmap chart */}
+          <div style={{ ...card, padding: 24, marginBottom: 24 }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 16, color: C.d }}>Monthly MRR Targets (FY27 Roadmap)</h3>
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={monthlyBenchmarks}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={50} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}K`} />
+                <Tooltip formatter={(v) => `$${v.toLocaleString()}`} />
+                <Area type="monotone" dataKey="mrrTarget" stroke={C.pri} fill={C.pri} fillOpacity={0.15} strokeWidth={2} name="MRR Target" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Monthly deal + MRR table */}
+          <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 24 }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#F9FAFB" }}>
+                    {["Month", "Deal Target", "Enterprise", "MRR Target", "Key Milestone"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyBenchmarks.map((m, i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid #F3F4F6", background: i < 3 ? "#FFFBEB" : C.w }}>
+                      <td style={{ padding: "10px 14px", fontWeight: 600 }}>{m.month}</td>
+                      <td style={{ padding: "10px 14px", fontWeight: 700, color: C.pri }}>{m.dealsTarget}</td>
+                      <td style={{ padding: "10px 14px", color: m.enterprise > 0 ? C.pur : C.g }}>{m.enterprise > 0 ? `+${m.enterprise}E` : "—"}</td>
+                      <td style={{ padding: "10px 14px", fontWeight: 700, color: C.ok }}>${m.mrrTarget.toLocaleString()}</td>
+                      <td style={{ padding: "10px 14px", color: C.g, fontSize: 12 }}>{m.milestone}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Weekly KPI targets */}
+          <div style={{ ...card, padding: 24, marginBottom: 24 }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 16, color: C.d }}>Weekly KPI Targets (Monday Standup)</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+              {[
+                { label: "Pipeline Coverage", value: `${kpiTargets.pipelineCoverage}x`, desc: "of quarterly revenue goal", color: C.pri },
+                { label: "Demos / Week", value: `${kpiTargets.demosPerWeek}`, desc: "per AE (8-10 stretch)", color: C.info },
+                { label: "Trial-to-Paid", value: `${(kpiTargets.trialConversion * 100).toFixed(0)}%+`, desc: "conversion rate (stretch)", color: C.ok },
+                { label: "Monthly Churn", value: `<${(kpiTargets.monthlyChurn * 100).toFixed(0)}%`, desc: "tighter for stretch goal", color: C.bad },
+                { label: "MRR Growth MoM", value: `${(kpiTargets.mrrGrowthMoM * 100).toFixed(0)}-60%`, desc: "stretch target in early months", color: C.teal },
+                { label: "CAC Payback", value: `<${kpiTargets.cacPaybackSMB}mo`, desc: "SMB; <10mo enterprise", color: C.warn },
+                { label: "Outbound / Week", value: `300-500`, desc: "personalized touches (60-80/day)", color: C.pur },
+                { label: "Sales Cycle", value: "25-35d", desc: "SMB (compress); 50-80d enterprise", color: C.g },
+              ].map((k, i) => (
+                <div key={i} style={{ padding: 14, borderRadius: 10, border: "1px solid #E5E7EB", background: "#FAFAFA" }}>
+                  <div style={{ fontSize: 11, color: C.g, textTransform: "uppercase", fontWeight: 600, letterSpacing: "0.05em" }}>{k.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: k.color, margin: "4px 0 2px" }}>{k.value}</div>
+                  <div style={{ fontSize: 12, color: C.g }}>{k.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Geo priority */}
+          <div style={{ ...card, padding: 24 }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 16, color: C.d }}>Geographic Priority</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+              {[
+                { priority: "P1 (70%)", region: "India / SAARC", tier: "$99–$899/mo", arpa: "$300–$500", strategy: "Volume play, fast close", color: C.pri },
+                { priority: "P2 (20%)", region: "US / UK / Canada", tier: "$499–$2,499/mo", arpa: "$800–$1,500", strategy: "High ARPU, enterprise focus", color: C.ok },
+                { priority: "P3 (10%)", region: "ME / UAE / APAC", tier: "$399–$1,999/mo", arpa: "$600–$1,000", strategy: "India–ME corridor", color: C.warn },
+              ].map((g, i) => (
+                <div key={i} style={{ padding: 16, borderRadius: 10, border: `2px solid ${g.color}20`, background: `${g.color}08` }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: g.color, marginBottom: 6 }}>{g.priority}</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: C.d, marginBottom: 8 }}>{g.region}</div>
+                  <div style={{ fontSize: 12, color: C.g, marginBottom: 2 }}>Tier: {g.tier}</div>
+                  <div style={{ fontSize: 12, color: C.g, marginBottom: 2 }}>ARPA: {g.arpa}</div>
+                  <div style={{ fontSize: 12, color: g.color, fontWeight: 600, marginTop: 6 }}>{g.strategy}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ICP Definitions */}
+          <div style={{ ...card, padding: 24, marginTop: 24, marginBottom: 24 }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 16, color: C.d }}>Ideal Customer Profiles (ICP)</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+              {icpDefinitions.map((icp, i) => (
+                <div key={i} style={{ padding: 16, borderRadius: 10, border: "1px solid #E5E7EB", background: i === 2 ? "#F5F3FF" : i === 0 ? "#EEF2FF" : "#F0FDF4" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: i === 2 ? C.pur : i === 0 ? C.pri : C.ok, textTransform: "uppercase", marginBottom: 4 }}>{icp.tier} ICP</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: C.d, marginBottom: 8 }}>{icp.label}</div>
+                  <div style={{ fontSize: 12, color: C.g, lineHeight: 1.7 }}>
+                    <div><strong>Size:</strong> {icp.size}</div>
+                    <div><strong>Volume:</strong> {icp.volume}</div>
+                    <div><strong>Buyer:</strong> {icp.decisionMaker}</div>
+                    <div><strong>Deal:</strong> {icp.dealSize}</div>
+                    <div><strong>Pain:</strong> {icp.pain}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Sales Process Stages */}
+          <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 24 }}>
+            <div style={{ padding: "16px 24px 0" }}>
+              <h3 style={{ margin: "0 0 4px", fontSize: 16, color: C.d }}>Sales Process Stages</h3>
+              <p style={{ margin: "0 0 12px", fontSize: 13, color: C.g }}>Target cycle: 30–40d SMB, 45–60d Growth, 60–90d Enterprise</p>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#F9FAFB" }}>
+                    {["Stage", "Activity", "Owner", "Duration", "Exit Criteria"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {salesProcessStages.map((s, i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                      <td style={{ padding: "10px 14px" }}><StageBadge stage={s.stage} /></td>
+                      <td style={{ padding: "10px 14px", color: C.d }}>{s.activity}</td>
+                      <td style={{ padding: "10px 14px", color: C.g, fontWeight: 600 }}>{s.owner}</td>
+                      <td style={{ padding: "10px 14px", color: C.pri, fontWeight: 600 }}>{s.duration}</td>
+                      <td style={{ padding: "10px 14px", color: C.ok, fontStyle: "italic" }}>{s.exitCriteria}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Enterprise Deal Economics */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+            <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "16px 24px 0" }}>
+                <h3 style={{ margin: "0 0 12px", fontSize: 16, color: C.d }}>Enterprise vs SMB Economics</h3>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "#F9FAFB" }}>
+                      {["Metric", "SMB", "Enterprise"].map((h) => (
+                        <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {enterpriseDealEconomics.map((e, i) => (
+                      <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                        <td style={{ padding: "10px 14px", fontWeight: 600, color: C.d }}>{e.metric}</td>
+                        <td style={{ padding: "10px 14px", color: C.g }}>{e.smb}</td>
+                        <td style={{ padding: "10px 14px", color: C.pur, fontWeight: 600 }}>{e.enterprise}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Enterprise Revenue Projection */}
+            <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "16px 24px 0" }}>
+                <h3 style={{ margin: "0 0 4px", fontSize: 16, color: C.d }}>Enterprise Revenue Overlay</h3>
+                <p style={{ margin: "0 0 12px", fontSize: 12, color: C.g }}>Stretch: Base + Enterprise ($1.28M) = $2.75M cumulative target</p>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "#F9FAFB" }}>
+                      {["Quarter", "Deals", "Avg MRR", "Q Rev", "Cumulative"].map((h) => (
+                        <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {enterpriseProjection.map((q, i) => (
+                      <tr key={i} style={{ borderBottom: "1px solid #F3F4F6", background: i === 3 ? "#F5F3FF" : C.w }}>
+                        <td style={{ padding: "10px 14px", fontWeight: 600, color: C.d }}>{q.quarter}</td>
+                        <td style={{ padding: "10px 14px", color: C.pur, fontWeight: 700 }}>{q.deals}</td>
+                        <td style={{ padding: "10px 14px", color: C.g }}>${q.avgMRR.toLocaleString()}</td>
+                        <td style={{ padding: "10px 14px", fontWeight: 600, color: C.ok }}>${q.qRev.toLocaleString()}</td>
+                        <td style={{ padding: "10px 14px", fontWeight: 700, color: C.pri }}>${q.cumRev.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ background: "#EEF2FF", borderTop: "2px solid #C7D2FE" }}>
+                      <td style={{ padding: "10px 14px", fontWeight: 800, color: C.d }}>Total</td>
+                      <td style={{ padding: "10px 14px", fontWeight: 800, color: C.pur }}>25</td>
+                      <td style={{ padding: "10px 14px" }}></td>
+                      <td style={{ padding: "10px 14px", fontWeight: 800, color: C.ok }}>$1,282,000</td>
+                      <td style={{ padding: "10px 14px", fontWeight: 800, color: C.pri }}>$1,282,000</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Sales Team Hiring Plan */}
+          <div style={{ ...card, padding: 24, marginBottom: 24 }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 16, color: C.d }}>Sales Team Hiring Plan</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+              {hiringPlan.map((p, i) => (
+                <div key={i} style={{ padding: 16, borderRadius: 10, border: `2px solid ${[C.pri, C.ok, C.pur][i]}20`, background: `${[C.pri, C.ok, C.pur][i]}06` }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: [C.pri, C.ok, C.pur][i], marginBottom: 2 }}>{p.phase}</div>
+                  <div style={{ fontSize: 12, color: C.g, marginBottom: 8 }}>{p.period}</div>
+                  <div style={{ fontSize: 13, color: C.d, fontWeight: 600, marginBottom: 6 }}>{p.team}</div>
+                  <div style={{ fontSize: 12, color: C.g, lineHeight: 1.5 }}>{p.focus}</div>
+                  <div style={{ marginTop: 8, fontSize: 20, fontWeight: 800, color: [C.pri, C.ok, C.pur][i] }}>{p.headcount} <span style={{ fontSize: 12, fontWeight: 600 }}>reps</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Sales Tools & Infrastructure */}
+          <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 24 }}>
+            <div style={{ padding: "16px 24px 0" }}>
+              <h3 style={{ margin: "0 0 12px", fontSize: 16, color: C.d }}>Sales Infrastructure & Tools</h3>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#F9FAFB" }}>
+                    {["Category", "Tool", "Purpose", "Go-Live"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {salesTools.map((t, i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                      <td style={{ padding: "10px 14px", fontWeight: 600, color: C.d }}>{t.category}</td>
+                      <td style={{ padding: "10px 14px", color: C.pri, fontWeight: 600 }}>{t.tool}</td>
+                      <td style={{ padding: "10px 14px", color: C.g }}>{t.purpose}</td>
+                      <td style={{ padding: "10px 14px" }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+                          background: t.priority === "Day 1" ? "#D1FAE5" : t.priority.includes("Week") ? "#FEF3C7" : "#E0E7FF",
+                          color: t.priority === "Day 1" ? "#065F46" : t.priority.includes("Week") ? "#92400E" : "#3730A3" }}>{t.priority}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Risks & Mitigations */}
+          <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 24 }}>
+            <div style={{ padding: "16px 24px 0" }}>
+              <h3 style={{ margin: "0 0 12px", fontSize: 16, color: C.d }}>Risk Matrix</h3>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#F9FAFB" }}>
+                    {["Risk", "Impact", "Mitigation", "Owner"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {risksMatrix.map((r, i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                      <td style={{ padding: "10px 14px", fontWeight: 600, color: C.d }}>{r.risk}</td>
+                      <td style={{ padding: "10px 14px" }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+                          background: r.impact === "High" ? "#FEE2E2" : "#FEF3C7",
+                          color: r.impact === "High" ? "#991B1B" : "#92400E" }}>{r.impact}</span>
+                      </td>
+                      <td style={{ padding: "10px 14px", color: C.g, fontSize: 12, lineHeight: 1.4 }}>{r.mitigation}</td>
+                      <td style={{ padding: "10px 14px", fontWeight: 600, color: C.pri, whiteSpace: "nowrap" }}>{r.owner}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* First 30 Days Action Plan */}
+          <div style={{ ...card, padding: 24 }}>
+            <h3 style={{ margin: "0 0 4px", fontSize: 16, color: C.d }}>First 30 Days Action Plan (April 2026)</h3>
+            <p style={{ margin: "0 0 14px", fontSize: 13, color: C.g }}>Non-negotiable actions to set the GTM engine in motion</p>
+            {first30Days.map((item, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: i < first30Days.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                <div style={{ width: 24, height: 24, borderRadius: 6, background: C.pri, color: C.w, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                <div style={{ fontSize: 14, color: C.d, lineHeight: 1.5 }}>{item}</div>
+              </div>
+            ))}
+          </div>
+        </div>)}
+
+        {/* ── PIPELINE ── */}
+        {tab === "pipeline" && (<div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div><h2 style={{ margin: 0, fontSize: 20, color: C.d }}>Deal Pipeline</h2><p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Rep can see this but cannot edit. You control everything.</p></div>
+            <button onClick={() => setDealModal({ open: true, deal: null })} style={btnS(C.pri, true)}>+ Add Deal</button>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            {[{ l: "Open", v: metrics.active.length, c: C.pri }, { l: "Pipeline MRR", v: `$${metrics.pv.toLocaleString()}`, c: C.pur }, { l: "Won MRR", v: `$${metrics.cm.toLocaleString()}`, c: C.ok }, { l: "Coverage", v: `${(metrics.pv / 3500).toFixed(1)}x`, c: metrics.pv >= 3500 * 4 ? C.ok : C.bad }].map((x, i) => (
+              <div key={i} style={{ ...card, padding: "8px 18px", textAlign: "center" }}><div style={{ fontSize: 11, color: C.g, textTransform: "uppercase" }}>{x.l}</div><div style={{ fontSize: 20, fontWeight: 700, color: x.c }}>{x.v}</div></div>
+            ))}
+          </div>
+
+          <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                <thead><tr style={{ background: "#F9FAFB" }}>
+                  {["Company", "Segment", "Geo", "Stage", "MRR", "Days", "Next Step", "Actions"].map((h) => (
+                    <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {[...pipeline].sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage)).map((d) => (
+                    <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                      <td style={{ padding: "12px 14px", fontWeight: 600, color: C.d }}>{d.company}</td>
+                      <td style={{ padding: "12px 14px", color: C.g }}>{d.segment}</td>
+                      <td style={{ padding: "12px 14px", color: C.g }}>{d.geo}</td>
+                      <td style={{ padding: "12px 14px" }}><StageBadge stage={d.stage} /></td>
+                      <td style={{ padding: "12px 14px", fontWeight: 600, color: C.pri }}>${d.value.toLocaleString()}</td>
+                      <td style={{ padding: "12px 14px", color: d.daysInStage > 7 ? C.bad : C.g }}>{d.stage === "Closed" ? "—" : `${d.daysInStage}d`}</td>
+                      <td style={{ padding: "12px 14px", color: C.g, fontStyle: "italic" }}>{d.nextStep}</td>
+                      <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                        <button onClick={() => setDealModal({ open: true, deal: d })} style={{ ...btnS(C.pri, false), padding: "4px 10px", fontSize: 12, marginRight: 6 }}>Edit</button>
+                        <button onClick={() => setConfirmDel({ open: true, type: "deal", id: d.id })} style={{ ...btnS(C.bad, false), padding: "4px 10px", fontSize: 12 }}>Del</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {pipeline.filter((d) => d.daysInStage > 5 && d.stage !== "Closed" && d.stage !== "Lost").length > 0 && (
+            <div style={{ marginTop: 16, background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 10, padding: 16 }}>
+              <div style={{ fontWeight: 700, color: "#92400E", marginBottom: 6 }}>Stalled Deals</div>
+              {pipeline.filter((d) => d.daysInStage > 5 && d.stage !== "Closed" && d.stage !== "Lost").map((d) => (
+                <div key={d.id} style={{ fontSize: 14, color: "#92400E", padding: "2px 0" }}>
+                  <strong>{d.company}</strong> in {d.stage} for {d.daysInStage}d — <button onClick={() => setDealModal({ open: true, deal: d })} style={{ ...btnS("#92400E", false), padding: "2px 8px", fontSize: 11 }}>Update</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>)}
+
+        {/* ── WEEKLY REPORTS (review) ── */}
+        {tab === "reports" && (<div>
+          <h2 style={{ margin: "0 0 4px", fontSize: 20, color: C.d }}>Rep's Weekly Reports</h2>
+          <p style={{ margin: "0 0 20px", fontSize: 14, color: C.g }}>Submitted by Rep. Review before Monday standup.</p>
+          {[...weeklyReports].reverse().map((r) => (
+            <div key={r.id} style={{ ...card, padding: 20, marginBottom: 14, borderLeft: r.submitted ? `4px solid ${C.ok}` : `4px solid ${C.warn}`, opacity: r.submitted ? 1 : 0.6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, fontSize: 15, color: C.d }}>{r.weekLabel}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: r.submitted ? "#D1FAE5" : "#FDE68A", color: r.submitted ? "#065F46" : "#92400E" }}>
+                  {r.submitted ? "SUBMITTED" : "NOT YET"}
+                </span>
+              </div>
+              {r.submitted && (
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 8, marginBottom: 12 }}>
+                    {[
+                      { l: "Calls", v: r.calls, t: weeklyTargets.callsPerWeek },
+                      { l: "Emails", v: r.emails, t: weeklyTargets.emailsPerWeek },
+                      { l: "LinkedIn", v: r.linkedin, t: weeklyTargets.linkedinPerWeek },
+                      { l: "Demos", v: r.demosDone, t: weeklyTargets.demosPerWeek },
+                      { l: "Proposals", v: r.proposals },
+                      { l: "Closed", v: r.closed },
+                    ].map((x, i) => (
+                      <div key={i} style={{ textAlign: "center", padding: 8, background: "#F9FAFB", borderRadius: 8 }}>
+                        <div style={{ fontSize: 10, color: C.g, textTransform: "uppercase" }}>{x.l}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: x.t ? (x.v >= x.t ? C.ok : x.v >= x.t * 0.7 ? C.warn : C.bad) : C.d }}>{x.v}</div>
+                        {x.t && <div style={{ fontSize: 10, color: C.g }}>/{x.t}</div>}
+                      </div>
+                    ))}
+                  </div>
+                  {r.topWin && <div style={{ fontSize: 14, marginBottom: 4 }}><strong style={{ color: C.ok }}>Win:</strong> {r.topWin}</div>}
+                  {r.blockers && <div style={{ fontSize: 14, marginBottom: 4 }}><strong style={{ color: C.bad }}>Blockers:</strong> {r.blockers}</div>}
+                  {r.plan && <div style={{ fontSize: 14 }}><strong style={{ color: C.pri }}>Next Plan:</strong> {r.plan}</div>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>)}
+
+        {/* ── ONBOARDING (admin) ── */}
+        {tab === "onboarding" && (<div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20, color: C.d }}>Onboarding Tracker</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>You add/remove tasks. Rep can only tick them off. Changes show on their view instantly.</p>
+            </div>
+          </div>
+
+          <div style={{ ...card, padding: 20, marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontSize: 14, color: C.g }}>{obDone}/{obTotal} tasks ticked by Rep</span>
+              <span style={{ fontSize: 20, fontWeight: 700, color: C.pri }}>{obTotal ? Math.round(obDone / obTotal * 100) : 0}%</span>
+            </div>
+            <div style={{ height: 10, background: "#E5E7EB", borderRadius: 5, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${obTotal ? Math.round(obDone / obTotal * 100) : 0}%`, background: `linear-gradient(90deg, ${C.pri}, ${C.pur})`, borderRadius: 5 }} />
+            </div>
+          </div>
+
+          {onboarding.map((week, wi) => {
+            const wd = week.tasks.filter((t) => t.done).length;
+            const isCurrent = onboarding.findIndex((w) => w.tasks.some((t) => !t.done)) === wi;
+            return (
+              <div key={week.week} style={{ ...card, padding: 20, marginBottom: 14, border: isCurrent ? `2px solid ${C.pri}` : "1px solid #E5E7EB", background: isCurrent ? "#F5F3FF" : C.w }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: 15, color: C.d }}>Week {week.week}: {week.title}</span>
+                    {isCurrent && <span style={{ fontSize: 11, background: C.pri, color: C.w, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>CURRENT</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, color: C.g }}>{week.startDate} – {week.endDate} · {wd}/{week.tasks.length}</span>
+                    <button onClick={() => setTaskModal({ open: true, weekIdx: wi })} style={btnS(C.pri, true)}>+ Add Task</button>
+                  </div>
+                </div>
+                {week.tasks.map((t) => (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
+                    <div style={{
+                      width: 22, height: 22, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center",
+                      background: t.done ? C.ok : "#E5E7EB", color: t.done ? C.w : C.g, fontSize: 13, fontWeight: 700, flexShrink: 0,
+                    }}>{t.done ? "✓" : ""}</div>
+                    <span style={{ flex: 1, fontSize: 14, color: t.done ? C.g : C.d, textDecoration: t.done ? "line-through" : "none" }}>{t.task}</span>
+                    <span style={{ fontSize: 11, color: t.done ? C.ok : C.g, fontWeight: 600 }}>{t.done ? "Done" : "Pending"}</span>
+                    <button onClick={() => removeTask(wi, t.id)} style={{ background: "none", border: "none", color: "#D1D5DB", cursor: "pointer", fontSize: 16, padding: "2px 6px" }}
+                      onMouseEnter={(e) => e.target.style.color = C.bad} onMouseLeave={(e) => e.target.style.color = "#D1D5DB"}>x</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>)}
+
+        {/* ── MESSAGES TO REP ── */}
+        {tab === "messages" && (<div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20, color: C.d }}>Messages to Rep</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Rep sees these on their dashboard. Use for targets, kudos, and action items.</p>
+            </div>
+            <button onClick={() => setMsgModal({ open: true, msg: null })} style={btnS(C.pri, true)}>+ Send Message</button>
+          </div>
+          {messages.length === 0 && <div style={{ ...card, padding: 40, textAlign: "center", color: C.g }}>No messages sent yet.</div>}
+          {[...messages].reverse().map((m) => (
+            <div key={m.id} style={{ ...card, padding: 20, marginBottom: 12, borderLeft: `5px solid ${m.type === "kudos" ? C.ok : m.type === "action" ? C.warn : C.pri}`, background: m.type === "kudos" ? "#F0FDF4" : m.type === "action" ? "#FFFBEB" : "#EEF2FF" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 6,
+                      background: m.type === "kudos" ? "#D1FAE5" : m.type === "action" ? "#FDE68A" : "#C7D2FE",
+                      color: m.type === "kudos" ? "#065F46" : m.type === "action" ? "#92400E" : "#3730A3" }}>
+                      {m.type === "kudos" ? "KUDOS" : m.type === "action" ? "ACTION REQUIRED" : "TARGET"}
+                    </span>
+                    <span style={{ fontSize: 13, color: C.g }}>{m.date}</span>
+                    <span style={{ fontSize: 11, color: C.teal, fontWeight: 600 }}>Visible to Rep</span>
+                  </div>
+                  <div style={{ fontSize: 15, color: C.d, lineHeight: 1.5 }}>{m.text}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 16 }}>
+                  <button onClick={() => setMsgModal({ open: true, msg: m })} style={btnS(C.pri, false)}>Edit</button>
+                  <button onClick={() => setConfirmDel({ open: true, type: "msg", id: m.id })} style={btnS(C.bad, false)}>Del</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>)}
+
+        {/* ── PRIVATE NOTES ── */}
+        {tab === "notes" && (<div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20, color: C.d }}>Private Notes</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Only you see these. Rep has no access.</p>
+            </div>
+            <button onClick={() => setNoteModal({ open: true, note: null })} style={btnS(C.pri, true)}>+ Add Note</button>
+          </div>
+          {notes.length === 0 && <div style={{ ...card, padding: 40, textAlign: "center", color: C.g }}>No notes yet.</div>}
+          {[...notes].reverse().map((n) => (
+            <div key={n.id} style={{ ...card, padding: 20, marginBottom: 12, borderLeft: `5px solid ${n.type === "positive" ? C.ok : n.type === "action" ? C.warn : C.bad}`, background: n.type === "positive" ? "#F0FDF4" : n.type === "action" ? "#FFFBEB" : "#FEF2F2" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 6,
+                      background: n.type === "positive" ? "#D1FAE5" : n.type === "action" ? "#FDE68A" : "#FECACA",
+                      color: n.type === "positive" ? "#065F46" : n.type === "action" ? "#92400E" : "#991B1B" }}>
+                      {n.type === "positive" ? "POSITIVE" : n.type === "action" ? "ACTION NEEDED" : "FLAG"}
+                    </span>
+                    <span style={{ fontSize: 13, color: C.g }}>{n.date}</span>
+                  </div>
+                  <div style={{ fontSize: 15, color: C.d, lineHeight: 1.5 }}>{n.text}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 16 }}>
+                  <button onClick={() => setNoteModal({ open: true, note: n })} style={btnS(C.pri, false)}>Edit</button>
+                  <button onClick={() => setConfirmDel({ open: true, type: "note", id: n.id })} style={btnS(C.bad, false)}>Del</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>)}
+
+        <div style={{ marginTop: 40, paddingTop: 16, borderTop: "1px solid #E5E7EB", textAlign: "center", fontSize: 12, color: C.g }}>
+          TheHireHub.AI · Command Center · Manager view — Rep cannot see private notes
+        </div>
+      </div>
+
+      {/* ── MODALS ── */}
+      <DealForm open={dealModal.open} deal={dealModal.deal} onClose={() => setDealModal({ open: false, deal: null })} onSave={saveDeal} />
+      <MsgForm open={msgModal.open} msg={msgModal.msg} onClose={() => setMsgModal({ open: false, msg: null })} onSave={saveMsg} />
+      <NoteForm open={noteModal.open} note={noteModal.note} onClose={() => setNoteModal({ open: false, note: null })} onSave={saveNote} />
+      <TaskForm open={taskModal.open} weekIdx={taskModal.weekIdx} weeks={onboarding} onClose={() => setTaskModal({ open: false, weekIdx: null })} onSave={addTask} />
+      <Modal open={confirmDel.open} onClose={() => setConfirmDel({ open: false })} title="Confirm Delete" width={380}>
+        <p style={{ margin: "0 0 20px", fontSize: 15, color: C.d }}>Delete this? Can't be undone.</p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={() => setConfirmDel({ open: false })} style={btnS(C.g, false)}>Cancel</button>
+          <button onClick={() => {
+            if (confirmDel.type === "deal") deleteDeal(confirmDel.id);
+            else if (confirmDel.type === "msg") deleteMsg(confirmDel.id);
+            else if (confirmDel.type === "note") deleteNote(confirmDel.id);
+          }} style={btnS(C.bad, true)}>Delete</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ─── FORM MODALS ───
+function DealForm({ open, deal, onClose, onSave }) {
+  const [f, setF] = useState(deal || { company: "", segment: "SMB", stage: "Lead", value: 0, geo: "India", daysInStage: 0, nextStep: "", startDate: new Date().toISOString().slice(0, 10) });
+  if (!open) return null;
+  return (
+    <Modal open={open} onClose={onClose} title={deal ? "Edit Deal" : "Add Deal"}>
+      <Field label="Company"><input style={inp} value={f.company} onChange={(e) => setF({ ...f, company: e.target.value })} placeholder="Company name" /></Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="Segment"><select style={sel} value={f.segment} onChange={(e) => setF({ ...f, segment: e.target.value })}>{SEGMENTS.map((s) => <option key={s}>{s}</option>)}</select></Field>
+        <Field label="Geo"><select style={sel} value={f.geo} onChange={(e) => setF({ ...f, geo: e.target.value })}>{GEOS.map((g) => <option key={g}>{g}</option>)}</select></Field>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="Stage"><select style={sel} value={f.stage} onChange={(e) => setF({ ...f, stage: e.target.value })}>{STAGES.map((s) => <option key={s}>{s}</option>)}</select></Field>
+        <Field label="MRR ($)"><input style={inp} type="number" value={f.value} onChange={(e) => setF({ ...f, value: parseInt(e.target.value) || 0 })} /></Field>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="Days in Stage"><input style={inp} type="number" value={f.daysInStage} onChange={(e) => setF({ ...f, daysInStage: parseInt(e.target.value) || 0 })} /></Field>
+        <Field label="Start Date"><input style={inp} type="date" value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} /></Field>
+      </div>
+      <Field label="Next Step"><input style={inp} value={f.nextStep} onChange={(e) => setF({ ...f, nextStep: e.target.value })} /></Field>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+        <button onClick={onClose} style={btnS(C.g, false)}>Cancel</button>
+        <button onClick={() => onSave(f)} style={btnS(C.pri, true)} disabled={!f.company}>{deal ? "Save" : "Add Deal"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function MsgForm({ open, msg, onClose, onSave }) {
+  const [f, setF] = useState(msg || { date: new Date().toISOString().slice(0, 10), text: "", type: "target" });
+  if (!open) return null;
+  const types = [{ value: "kudos", label: "Kudos", c: C.ok }, { value: "action", label: "Action Required", c: C.warn }, { value: "target", label: "Target / Direction", c: C.pri }];
+  return (
+    <Modal open={open} onClose={onClose} title={msg ? "Edit Message" : "Send Message to Rep"} width={500}>
+      <div style={{ padding: "8px 12px", background: "#EEF2FF", borderRadius: 8, marginBottom: 16, fontSize: 13, color: "#3730A3" }}>Rep will see this on their dashboard immediately.</div>
+      <Field label="Date"><input style={inp} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+      <Field label="Type">
+        <div style={{ display: "flex", gap: 8 }}>{types.map((t) => <button key={t.value} onClick={() => setF({ ...f, type: t.value })} style={{ ...btnS(t.c, f.type === t.value), flex: 1, justifyContent: "center" }}>{t.label}</button>)}</div>
+      </Field>
+      <Field label="Message"><textarea style={{ ...inp, height: 90, resize: "vertical" }} value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} placeholder="Your message to Rep..." /></Field>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+        <button onClick={onClose} style={btnS(C.g, false)}>Cancel</button>
+        <button onClick={() => onSave(f)} style={btnS(C.pri, true)} disabled={!f.text}>{msg ? "Save" : "Send"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function NoteForm({ open, note, onClose, onSave }) {
+  const [f, setF] = useState(note || { date: new Date().toISOString().slice(0, 10), text: "", type: "flag" });
+  if (!open) return null;
+  const types = [{ value: "positive", label: "Positive", c: C.ok }, { value: "flag", label: "Flag", c: C.bad }, { value: "action", label: "Action Needed", c: C.warn }];
+  return (
+    <Modal open={open} onClose={onClose} title={note ? "Edit Note" : "Add Private Note"} width={480}>
+      <Field label="Date"><input style={inp} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+      <Field label="Type"><div style={{ display: "flex", gap: 8 }}>{types.map((t) => <button key={t.value} onClick={() => setF({ ...f, type: t.value })} style={{ ...btnS(t.c, f.type === t.value), flex: 1, justifyContent: "center" }}>{t.label}</button>)}</div></Field>
+      <Field label="Note"><textarea style={{ ...inp, height: 90, resize: "vertical" }} value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} placeholder="Your private observation..." /></Field>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+        <button onClick={onClose} style={btnS(C.g, false)}>Cancel</button>
+        <button onClick={() => onSave(f)} style={btnS(C.pri, true)} disabled={!f.text}>{note ? "Save" : "Add"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function TaskForm({ open, weekIdx, weeks, onClose, onSave }) {
+  const [text, setText] = useState("");
+  if (!open || weekIdx === null) return null;
+  return (
+    <Modal open={open} onClose={onClose} title={`Add Task — Week ${weeks[weekIdx].week}`} width={440}>
+      <div style={{ padding: "8px 12px", background: "#EEF2FF", borderRadius: 8, marginBottom: 16, fontSize: 13, color: "#3730A3" }}>This task will appear on Rep's onboarding view immediately.</div>
+      <Field label="Task"><input style={inp} value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. Complete competitive analysis doc" autoFocus /></Field>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+        <button onClick={onClose} style={btnS(C.g, false)}>Cancel</button>
+        <button onClick={() => { if (text.trim()) { onSave(weekIdx, text.trim()); setText(""); } }} style={btnS(C.pri, true)} disabled={!text.trim()}>Add Task</button>
+      </div>
+    </Modal>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+
+  </script>
+</body>
+</html>

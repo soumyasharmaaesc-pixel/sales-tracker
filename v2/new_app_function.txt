@@ -1,0 +1,124 @@
+function App() {
+  // ─── ROLE from window._ROLE (set by host HTML page) ───
+  const ROLE = (typeof window !== "undefined" && window._ROLE) || "manager";
+  const isManager = ROLE === "manager";
+
+  // ─── LOCAL-STORAGE HELPERS ───
+  const LS_KEY = "thh_sales_dashboard_v2";
+  const loadLS = () => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) { return null; }
+  };
+  const initial = loadLS();
+
+  // ─── SHARED STATE (persisted to localStorage) ───
+  const [pipeline, setPipeline] = useState((initial && initial.pipeline) || initPipeline);
+  const [weeklyReports, setWeeklyReports] = useState((initial && initial.weeklyReports) || initWeeklyReports);
+  const [onboarding, setOnboarding] = useState((initial && initial.onboarding) || initOnboarding);
+  const [messages, setMessages] = useState((initial && initial.messages) || initMessages);
+  const [notes, setNotes] = useState((initial && initial.notes) || initNotes);
+
+  // ─── PERSIST ON CHANGE ───
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({ pipeline, weeklyReports, onboarding, messages, notes }));
+    } catch (e) { /* ignore quota errors */ }
+  }, [pipeline, weeklyReports, onboarding, messages, notes]);
+
+  // ─── CROSS-TAB SYNC via storage events ───
+  React.useEffect(() => {
+    const handler = (ev) => {
+      if (ev.key !== LS_KEY || !ev.newValue) return;
+      try {
+        const d = JSON.parse(ev.newValue);
+        if (d.pipeline) setPipeline(d.pipeline);
+        if (d.weeklyReports) setWeeklyReports(d.weeklyReports);
+        if (d.onboarding) setOnboarding(d.onboarding);
+        if (d.messages) setMessages(d.messages);
+        if (d.notes) setNotes(d.notes);
+      } catch (e) { /* ignore parse errors */ }
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+
+  // ─── RESET TO DAY 1 ───
+  const resetAll = () => {
+    if (!window.confirm("Reset all data back to Day 1 (Apr 10, 2026)? This will clear pipeline, reports, onboarding progress, messages and notes across BOTH dashboards.")) return;
+    setPipeline(initPipeline);
+    setWeeklyReports(initWeeklyReports);
+    setOnboarding(initOnboarding);
+    setMessages(initMessages);
+    setNotes(initNotes);
+  };
+
+  const nextId = (arr) => Math.max(0, ...arr.map((x) => x.id)) + 1;
+
+  // ─── SHARED COMPUTED ───
+  const submitted = weeklyReports.filter((r) => r.submitted);
+  const metrics = useMemo(() => {
+    const tc = submitted.reduce((s, r) => s + r.calls, 0);
+    const te = submitted.reduce((s, r) => s + r.emails, 0);
+    const td = submitted.reduce((s, r) => s + r.demosDone, 0);
+    const active = pipeline.filter((d) => d.stage !== "Closed" && d.stage !== "Lost");
+    const pv = active.reduce((s, d) => s + d.value, 0);
+    const cm = pipeline.filter((d) => d.stage === "Closed").reduce((s, d) => s + d.value, 0);
+    const won = pipeline.filter((d) => d.stage === "Closed").length;
+    return { tc, te, td, active, pv, cm, won, weeks: submitted.length };
+  }, [submitted, pipeline]);
+
+  const otherHref = isManager ? "rep.html" : "manager.html";
+  const otherLabel = isManager ? "Switch to Rep View" : "Switch to Manager View";
+  const barColor = isManager ? C.pri : C.teal;
+  const barLabel = isManager ? "MANAGER DASHBOARD" : "REP DASHBOARD";
+  const barSub = isManager ? "Full CRUD · You can see everything" : "Focused workspace · Your pipeline, reports, onboarding & messages";
+
+  return (
+    <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", background: "#F9FAFB", minHeight: "100vh" }}>
+
+      {/* ─── ROLE HEADER BAR ─── */}
+      <div style={{ background: C.d, padding: "12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, borderBottom: `3px solid ${barColor}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: barColor, boxShadow: `0 0 12px ${barColor}` }}></div>
+          <div>
+            <div style={{ color: C.w, fontSize: 13, fontWeight: 700, letterSpacing: "0.08em" }}>{barLabel}</div>
+            <div style={{ color: "#9CA3AF", fontSize: 11, marginTop: 1 }}>{barSub}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={resetAll} title="Reset all data to Day 1" style={{
+            padding: "7px 14px", borderRadius: 8, border: "1px solid #374151", cursor: "pointer",
+            background: "transparent", color: "#9CA3AF", fontWeight: 600, fontSize: 12,
+          }}>Reset Day 1</button>
+          <a href={otherHref} style={{
+            padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
+            background: barColor, color: C.w, fontWeight: 700, fontSize: 13, textDecoration: "none",
+            display: "inline-flex", alignItems: "center", gap: 6,
+          }}>{otherLabel} →</a>
+        </div>
+      </div>
+
+      {isManager ? (
+        <AdminView
+          pipeline={pipeline} setPipeline={setPipeline}
+          weeklyReports={weeklyReports} setWeeklyReports={setWeeklyReports}
+          onboarding={onboarding} setOnboarding={setOnboarding}
+          messages={messages} setMessages={setMessages}
+          notes={notes} setNotes={setNotes}
+          metrics={metrics} submitted={submitted} nextId={nextId}
+        />
+      ) : (
+        <SalesLeadView
+          pipeline={pipeline}
+          weeklyReports={weeklyReports} setWeeklyReports={setWeeklyReports}
+          onboarding={onboarding} setOnboarding={setOnboarding}
+          messages={messages}
+          metrics={metrics} submitted={submitted}
+        />
+      )}
+    </div>
+  );
+}
