@@ -328,11 +328,16 @@ function App() {
     const tc = submitted.reduce((s, r) => s + r.calls, 0);
     const te = submitted.reduce((s, r) => s + r.emails, 0);
     const td = submitted.reduce((s, r) => s + r.demosDone, 0);
-    const active = pipeline.filter((d) => d.stage !== "Closed" && d.stage !== "Lost");
+    // PENDING APPROVAL deals are excluded from dashboard metrics entirely.
+    // Only approved deals (status !== "pending") count towards pipeline value,
+    // closed revenue, win counts, etc. in BOTH Manager and Rep dashboards.
+    const approved = pipeline.filter((d) => d.status !== "pending");
+    const active = approved.filter((d) => d.stage !== "Closed" && d.stage !== "Lost");
     const pv = active.reduce((s, d) => s + d.value, 0);
-    const cm = pipeline.filter((d) => d.stage === "Closed").reduce((s, d) => s + d.value, 0);
-    const won = pipeline.filter((d) => d.stage === "Closed").length;
-    return { tc, te, td, active, pv, cm, won, weeks: submitted.length };
+    const cm = approved.filter((d) => d.stage === "Closed").reduce((s, d) => s + d.value, 0);
+    const won = approved.filter((d) => d.stage === "Closed").length;
+    const pendingCount = pipeline.filter((d) => d.status === "pending").length;
+    return { tc, te, td, active, pv, cm, won, weeks: submitted.length, pendingCount };
   }, [submitted, pipeline]);
 
   const otherHref = isManager ? "rep.html" : "manager.html";
@@ -409,7 +414,9 @@ function SalesLeadView({ pipeline, setPipeline, weeklyReports, setWeeklyReports,
     setReportModal({ open: false, report: null });
   };
 
-  // Rep DEAL CRUD — every save appends a dated entry to deal.updates[]
+  // Rep DEAL CRUD — NEW deals are created as "pending" and must be approved
+  // by the Manager before they appear in dashboard metrics. EDITS to existing
+  // deals go through immediately (but are still logged to updates[]).
   const saveDeal = (d) => {
     if (d.id) {
       setPipeline((p) => p.map((x) => {
@@ -422,8 +429,11 @@ function SalesLeadView({ pipeline, setPipeline, weeklyReports, setWeeklyReports,
     } else {
       setPipeline((p) => {
         const id = nextId(p);
-        const entry = buildDealUpdateEntry(null, { ...d, id }, "rep");
-        return [...p, { ...d, id, updates: [entry] }];
+        const pendingDeal = { ...d, id, status: "pending" };
+        const entry = buildDealUpdateEntry(null, pendingDeal, "rep");
+        // Tag the creation entry so it's obvious in the timeline.
+        if (entry) entry.action = "created (pending approval)";
+        return [...p, { ...pendingDeal, updates: [entry] }];
       });
     }
     setDealModal({ open: false, deal: null });
@@ -632,21 +642,34 @@ function SalesLeadView({ pipeline, setPipeline, weeklyReports, setWeeklyReports,
           })}
         </div>)}
 
-        {/* ─── PIPELINE (rep can add/edit leads; every change is dated) ─── */}
+        {/* ─── PIPELINE (rep can add/edit leads; new leads need Manager approval) ─── */}
         {tab === "pipeline" && (<div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 12 }}>
             <div>
               <h2 style={{ margin: 0, fontSize: 20, color: C.d }}>My Deal Pipeline</h2>
-              <p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Add new leads and update existing ones. Every change is automatically dated and visible to Management.</p>
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Add new leads (Management must approve before they count towards your numbers). Every change is automatically dated.</p>
             </div>
             <button onClick={() => setDealModal({ open: true, deal: null })} style={btnS(C.teal, true)}>+ Add Lead</button>
           </div>
+
+          {/* Rep's own pending-approval banner */}
+          {pipeline.filter((d) => d.status === "pending").length > 0 && (
+            <div style={{ ...card, padding: 14, marginTop: 14, marginBottom: 0, borderLeft: `5px solid ${C.warn}`, background: "#FFFBEB" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#92400E" }}>
+                  ⏳ {pipeline.filter((d) => d.status === "pending").length} lead{pipeline.filter((d) => d.status === "pending").length === 1 ? "" : "s"} awaiting Management approval
+                </span>
+                <span style={{ fontSize: 12, color: "#92400E" }}>— these won't count toward your pipeline numbers until approved.</span>
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 12, marginBottom: 20, marginTop: 16, flexWrap: "wrap" }}>
             {[
               { l: "Open Deals", v: metrics.active.length, c: C.teal },
               { l: "Pipeline MRR", v: `$${metrics.pv.toLocaleString()}`, c: C.pur },
               { l: "Won MRR", v: `$${metrics.cm.toLocaleString()}`, c: C.ok },
+              { l: "Pending", v: metrics.pendingCount || 0, c: C.warn },
             ].map((x, i) => (
               <div key={i} style={{ ...card, padding: "8px 18px", textAlign: "center" }}>
                 <div style={{ fontSize: 11, color: C.g, textTransform: "uppercase" }}>{x.l}</div>
@@ -666,21 +689,31 @@ function SalesLeadView({ pipeline, setPipeline, weeklyReports, setWeeklyReports,
                   </tr>
                 </thead>
                 <tbody>
-                  {[...pipeline].sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage)).map((d) => (
-                    <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top" }}>
-                      <td style={{ padding: "12px 14px", fontWeight: 600, color: C.d }}>{d.company}</td>
-                      <td style={{ padding: "12px 14px", color: C.g }}>{d.segment}</td>
-                      <td style={{ padding: "12px 14px", color: C.g }}>{d.geo}</td>
-                      <td style={{ padding: "12px 14px" }}><StageBadge stage={d.stage} /></td>
-                      <td style={{ padding: "12px 14px", fontWeight: 600, color: C.teal }}>${d.value.toLocaleString()}/mo</td>
-                      <td style={{ padding: "12px 14px", color: d.daysInStage > 7 ? C.bad : C.g }}>{d.stage === "Closed" ? "—" : `${d.daysInStage}d`}</td>
-                      <td style={{ padding: "12px 14px", color: C.g, fontStyle: "italic" }}>{d.nextStep}</td>
-                      <td style={{ padding: "12px 14px" }}><DealTimeline deal={d} /></td>
-                      <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
-                        <button onClick={() => setDealModal({ open: true, deal: d })} style={{ ...btnS(C.teal, false), padding: "4px 10px", fontSize: 12 }}>Edit</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {[...pipeline].sort((a, b) => {
+                    // Pending deals first so the Rep can see what's awaiting approval.
+                    if ((a.status === "pending") !== (b.status === "pending")) return a.status === "pending" ? -1 : 1;
+                    return STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage);
+                  }).map((d) => {
+                    const isPending = d.status === "pending";
+                    return (
+                      <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top", background: isPending ? "#FFFBEB" : "transparent" }}>
+                        <td style={{ padding: "12px 14px", fontWeight: 600, color: C.d }}>
+                          {d.company}
+                          {isPending && <div style={{ marginTop: 4, display: "inline-block", fontSize: 9, background: C.warn, color: C.w, padding: "2px 7px", borderRadius: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em" }}>Pending Approval</div>}
+                        </td>
+                        <td style={{ padding: "12px 14px", color: C.g }}>{d.segment}</td>
+                        <td style={{ padding: "12px 14px", color: C.g }}>{d.geo}</td>
+                        <td style={{ padding: "12px 14px" }}><StageBadge stage={d.stage} /></td>
+                        <td style={{ padding: "12px 14px", fontWeight: 600, color: isPending ? C.g : C.teal }}>${d.value.toLocaleString()}/mo</td>
+                        <td style={{ padding: "12px 14px", color: d.daysInStage > 7 ? C.bad : C.g }}>{d.stage === "Closed" ? "—" : `${d.daysInStage}d`}</td>
+                        <td style={{ padding: "12px 14px", color: C.g, fontStyle: "italic" }}>{d.nextStep}</td>
+                        <td style={{ padding: "12px 14px" }}><DealTimeline deal={d} /></td>
+                        <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                          <button onClick={() => setDealModal({ open: true, deal: d })} style={{ ...btnS(C.teal, false), padding: "4px 10px", fontSize: 12 }}>Edit</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {pipeline.length === 0 && (
                     <tr><td colSpan={9} style={{ padding: 32, textAlign: "center", color: C.g, fontSize: 13 }}>No deals yet. Click <strong>+ Add Lead</strong> to log your first one.</td></tr>
                   )}
@@ -1239,7 +1272,8 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
   const [reportModal, setReportModal] = useState({ open: false, report: null });
   const [confirmDel, setConfirmDel] = useState({ open: false, type: null, id: null, extra: null });
 
-  // DEAL CRUD — every save appends a dated entry to deal.updates[]
+  // DEAL CRUD — Manager-created deals are auto-approved. Every save appends
+  // a dated entry to deal.updates[].
   const saveDeal = (d) => {
     if (d.id) {
       setPipeline((p) => p.map((x) => {
@@ -1252,13 +1286,33 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
     } else {
       setPipeline((p) => {
         const id = nextId(p);
-        const entry = buildDealUpdateEntry(null, { ...d, id }, "manager");
-        return [...p, { ...d, id, updates: [entry] }];
+        const approvedDeal = { ...d, id, status: "approved" };
+        const entry = buildDealUpdateEntry(null, approvedDeal, "manager");
+        return [...p, { ...approvedDeal, updates: [entry] }];
       });
     }
     setDealModal({ open: false, deal: null });
   };
   const deleteDeal = (id) => { setPipeline((p) => p.filter((x) => x.id !== id)); setConfirmDel({ open: false }); };
+
+  // APPROVAL workflow — Rep creates pending deals, Manager approves or rejects.
+  const approveDeal = (id) => {
+    const today = new Date().toISOString().slice(0, 10);
+    setPipeline((p) => p.map((x) => {
+      if (x.id !== id) return x;
+      const updates = [...(x.updates || []), {
+        date: today,
+        by: "Manager",
+        action: "approved",
+        changes: [`Lead approved · ${x.company} now visible on both dashboards`],
+      }];
+      return { ...x, status: "approved", updates };
+    }));
+  };
+  const rejectDeal = (id) => {
+    if (!window.confirm("Reject this pending lead? It will be removed from the pipeline. (The Data History reservoir still keeps an append-only log.)")) return;
+    setPipeline((p) => p.filter((x) => x.id !== id));
+  };
 
   // MESSAGE CRUD (Rep sees these)
   const emptyMsg = { date: new Date().toISOString().slice(0, 10), text: "", type: "target" };
@@ -1313,7 +1367,7 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
   const tabs = [
     { id: "overview", label: "Overview" },
     { id: "benchmarks", label: "GTM Benchmarks" },
-    { id: "pipeline", label: "Pipeline" },
+    { id: "pipeline", label: metrics.pendingCount > 0 ? `Pipeline · ${metrics.pendingCount} pending` : "Pipeline" },
     { id: "reports", label: "Weekly Reports" },
     { id: "onboarding", label: "Onboarding" },
     { id: "messages", label: "Messages to Rep" },
@@ -1364,6 +1418,23 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
 
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (<div>
+          {/* Prominent pending approvals banner — jumps straight to the Pipeline tab. */}
+          {metrics.pendingCount > 0 && (
+            <div onClick={() => setTab("pipeline")} style={{
+              ...card, padding: 16, marginBottom: 20, cursor: "pointer",
+              borderLeft: `5px solid ${C.warn}`, background: "#FFFBEB",
+              display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10,
+            }}>
+              <div>
+                <div style={{ fontWeight: 700, color: "#92400E", fontSize: 15 }}>
+                  ⏳ {metrics.pendingCount} lead{metrics.pendingCount === 1 ? "" : "s"} awaiting your approval
+                </div>
+                <div style={{ fontSize: 13, color: "#92400E", marginTop: 2 }}>Rep has submitted new deals that are hidden from dashboard metrics until you review and approve.</div>
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#92400E" }}>Review in Pipeline →</span>
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 24 }}>
             <MetricCard label="Deals Won (Apr)" value={metrics.won} target={5} color={C.ok} />
             <MetricCard label="Closed MRR" value={metrics.cm} target={3500} unit="$" color={C.pri} />
@@ -1737,9 +1808,51 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
         {/* ── PIPELINE ── */}
         {tab === "pipeline" && (<div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-            <div><h2 style={{ margin: 0, fontSize: 20, color: C.d }}>Deal Pipeline</h2><p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Rep can see this but cannot edit. You control everything.</p></div>
+            <div><h2 style={{ margin: 0, fontSize: 20, color: C.d }}>Deal Pipeline</h2><p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Rep submits new leads for approval. Approved deals show on both dashboards. You can add, edit, or remove any deal directly.</p></div>
             <button onClick={() => setDealModal({ open: true, deal: null })} style={btnS(C.pri, true)}>+ Add Deal</button>
           </div>
+
+          {/* ── APPROVAL QUEUE — only pending deals from Rep appear here. ── */}
+          {pipeline.filter((d) => d.status === "pending").length > 0 && (
+            <div style={{ ...card, padding: 20, marginBottom: 20, borderLeft: `5px solid ${C.warn}`, background: "#FFFBEB" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16, color: "#92400E" }}>Pending Approvals ({pipeline.filter((d) => d.status === "pending").length})</h3>
+                  <p style={{ margin: "4px 0 0", fontSize: 13, color: "#92400E" }}>New leads submitted by Rep. Review and approve to make them visible on both dashboards, or reject to remove.</p>
+                </div>
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {pipeline.filter((d) => d.status === "pending").map((d) => (
+                  <div key={d.id} style={{ padding: 14, background: C.w, borderRadius: 8, border: "1px solid #FDE68A" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 240 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                          <span style={{ fontWeight: 700, fontSize: 15, color: C.d }}>{d.company}</span>
+                          <span style={{ fontSize: 10, background: C.warn, color: C.w, padding: "2px 8px", borderRadius: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Pending</span>
+                          <StageBadge stage={d.stage} />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, fontSize: 12, color: C.g }}>
+                          <div><strong style={{ color: C.d }}>Segment:</strong> {d.segment}</div>
+                          <div><strong style={{ color: C.d }}>Geo:</strong> {d.geo}</div>
+                          <div><strong style={{ color: C.d }}>MRR:</strong> <span style={{ color: C.pri, fontWeight: 700 }}>${d.value.toLocaleString()}/mo</span></div>
+                          <div><strong style={{ color: C.d }}>Days:</strong> {d.daysInStage}d</div>
+                        </div>
+                        {d.nextStep && <div style={{ marginTop: 6, fontSize: 12, color: C.g, fontStyle: "italic" }}>Next step: {d.nextStep}</div>}
+                        {d.updates && d.updates[0] && (
+                          <div style={{ marginTop: 6, fontSize: 11, color: C.g }}>Submitted by <strong>{d.updates[0].by}</strong> on {d.updates[0].date}</div>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 110 }}>
+                        <button onClick={() => approveDeal(d.id)} style={{ ...btnS(C.ok, true), padding: "8px 14px", fontSize: 13 }}>✓ Approve</button>
+                        <button onClick={() => setDealModal({ open: true, deal: d })} style={{ ...btnS(C.pri, false), padding: "6px 14px", fontSize: 12 }}>Edit</button>
+                        <button onClick={() => rejectDeal(d.id)} style={{ ...btnS(C.bad, false), padding: "6px 14px", fontSize: 12 }}>✕ Reject</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
             {[{ l: "Open", v: metrics.active.length, c: C.pri }, { l: "Pipeline MRR", v: `$${metrics.pv.toLocaleString()}`, c: C.pur }, { l: "Won MRR", v: `$${metrics.cm.toLocaleString()}`, c: C.ok }, { l: "Coverage", v: `${(metrics.pv / 3500).toFixed(1)}x`, c: metrics.pv >= 3500 * 4 ? C.ok : C.bad }].map((x, i) => (
@@ -1756,7 +1869,7 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
                   ))}
                 </tr></thead>
                 <tbody>
-                  {[...pipeline].sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage)).map((d) => (
+                  {[...pipeline].filter((d) => d.status !== "pending").sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage)).map((d) => (
                     <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top" }}>
                       <td style={{ padding: "12px 14px", fontWeight: 600, color: C.d }}>{d.company}</td>
                       <td style={{ padding: "12px 14px", color: C.g }}>{d.segment}</td>
