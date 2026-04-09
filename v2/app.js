@@ -235,12 +235,33 @@ function App() {
 
   // ─── LOCAL-STORAGE HELPERS ───
   const LS_KEY = "thh_sales_dashboard_v2";
+  // Append-only history reservoir. Every state change is snapshotted here
+  // (debounced). Nothing is ever deleted from this key except the oldest
+  // snapshots if we exceed a hard cap. "Reset Day 1" does NOT touch this key.
+  const HISTORY_KEY = "thh_sales_dashboard_history_v1";
+  const HISTORY_CAP = 1000;
   const loadLS = () => {
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (!raw) return null;
       return JSON.parse(raw);
     } catch (e) { return null; }
+  };
+  const loadHistory = () => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  };
+  const appendSnapshot = (snapshot) => {
+    try {
+      const arr = loadHistory();
+      arr.push(snapshot);
+      if (arr.length > HISTORY_CAP) arr.splice(0, arr.length - HISTORY_CAP);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
+    } catch (e) { /* ignore quota errors */ }
   };
   const initial = loadLS();
 
@@ -252,10 +273,24 @@ function App() {
   const [notes, setNotes] = useState((initial && initial.notes) || initNotes);
 
   // ─── PERSIST ON CHANGE ───
+  const firstRunRef = React.useRef(true);
   React.useEffect(() => {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify({ pipeline, weeklyReports, onboarding, messages, notes }));
     } catch (e) { /* ignore quota errors */ }
+    // APPEND-ONLY HISTORY: debounced snapshot so typing bursts collapse
+    // into one history entry, but every meaningful change is preserved.
+    // The very first run (mount) is NOT snapshotted — that would duplicate
+    // whatever was already in localStorage.
+    if (firstRunRef.current) { firstRunRef.current = false; return; }
+    const t = setTimeout(() => {
+      appendSnapshot({
+        ts: new Date().toISOString(),
+        role: ROLE,
+        pipeline, weeklyReports, onboarding, messages, notes,
+      });
+    }, 800);
+    return () => clearTimeout(t);
   }, [pipeline, weeklyReports, onboarding, messages, notes]);
 
   // ─── CROSS-TAB SYNC via storage events ───
@@ -364,8 +399,12 @@ function SalesLeadView({ pipeline, weeklyReports, setWeeklyReports, onboarding, 
     setOnboarding((ob) => ob.map((w, i) => i === weekIdx ? { ...w, tasks: w.tasks.map((t) => t.id === taskId ? { ...t, done: !t.done } : t) } : w));
   };
 
-  const saveReport = (r) => {
-    setWeeklyReports((a) => a.map((x) => x.id === r.id ? { ...r, submitted: true } : x));
+  const saveReport = (values) => {
+    // Defensive merge: always preserve id/weekLabel/weekStart from the modal's report,
+    // then overlay the form values, then mark as submitted.
+    const base = reportModal.report || {};
+    const merged = { ...base, ...values, submitted: true, submittedAt: new Date().toISOString() };
+    setWeeklyReports((a) => a.map((x) => x.id === merged.id ? merged : x));
     setReportModal({ open: false, report: null });
   };
 
@@ -656,6 +695,10 @@ function SalesLeadView({ pipeline, weeklyReports, setWeeklyReports, onboarding, 
 // ─── Weekly Report Form (Rep submits) ───
 function WeeklyReportForm({ open, report, onClose, onSave }) {
   const [f, setF] = useState(report || {});
+  // CRITICAL: re-sync form state whenever the incoming report changes.
+  // Without this, useState keeps the first-mount value ({}) and the form
+  // loses id/weekLabel/weekStart, which breaks saveReport's id lookup.
+  React.useEffect(() => { setF(report || {}); }, [report]);
   if (!open || !report) return null;
   const n = (label, key) => (
     <Field label={label}><input style={inp} type="number" min="0" value={f[key] || 0} onChange={(e) => setF({ ...f, [key]: parseInt(e.target.value) || 0 })} /></Field>
@@ -679,6 +722,155 @@ function WeeklyReportForm({ open, report, onClose, onSave }) {
         <button onClick={() => onSave(f)} style={btnS("#0F766E", true)}>Submit Report</button>
       </div>
     </Modal>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════
+//  HISTORY VIEW — append-only data reservoir
+// ═══════════════════════════════════════════════════
+function HistoryView() {
+  const HISTORY_KEY = "thh_sales_dashboard_history_v1";
+  const [snapshots, setSnapshots] = React.useState(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  });
+  const [expanded, setExpanded] = React.useState(null);
+  const [filter, setFilter] = React.useState("all");
+
+  // Refresh on storage event so new snapshots from other tabs appear live.
+  React.useEffect(() => {
+    const handler = (ev) => {
+      if (ev.key !== HISTORY_KEY || !ev.newValue) return;
+      try {
+        const arr = JSON.parse(ev.newValue);
+        if (Array.isArray(arr)) setSnapshots(arr);
+      } catch (e) {}
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+
+  // Refresh snapshots when returning to the tab — catches same-tab appends.
+  React.useEffect(() => {
+    const tick = setInterval(() => {
+      try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(arr) && arr.length !== snapshots.length) setSnapshots(arr);
+      } catch (e) {}
+    }, 1500);
+    return () => clearInterval(tick);
+  }, [snapshots.length]);
+
+  const filtered = filter === "all" ? snapshots : snapshots.filter((s) => s.role === filter);
+  const fmt = (ts) => { try { return new Date(ts).toLocaleString(); } catch (e) { return ts; } };
+
+  const download = () => {
+    const blob = new Blob([JSON.stringify(snapshots, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sales-dashboard-history-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const restore = (snap) => {
+    if (!window.confirm(`Restore the live dashboard to the snapshot taken at ${fmt(snap.ts)}?\n\nThis will overwrite the current live data. The history itself will NOT be erased — this restore will also be logged as a new entry.`)) return;
+    const live = {
+      pipeline: snap.pipeline,
+      weeklyReports: snap.weeklyReports,
+      onboarding: snap.onboarding,
+      messages: snap.messages,
+      notes: snap.notes,
+    };
+    try {
+      localStorage.setItem("thh_sales_dashboard_v2", JSON.stringify(live));
+      window.location.reload();
+    } catch (e) { window.alert("Could not restore: " + e.message); }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20, color: C.d }}>Data History Reservoir</h2>
+          <p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>
+            Append-only log of every change. Nothing here is ever erased by "Reset Day 1" — past data is always recoverable.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <select value={filter} onChange={(e) => setFilter(e.target.value)} style={sel}>
+            <option value="all">All sources</option>
+            <option value="manager">Manager edits</option>
+            <option value="rep">Rep edits</option>
+          </select>
+          <button onClick={download} style={btnS(C.pri, true)} disabled={snapshots.length === 0}>
+            Download JSON ({snapshots.length})
+          </button>
+        </div>
+      </div>
+
+      {snapshots.length === 0 && (
+        <div style={{ ...card, padding: 40, textAlign: "center", color: C.g }}>
+          No history snapshots yet. Every edit made by Rep or Manager from now on will be preserved here.
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+          <div style={{ maxHeight: "65vh", overflowY: "auto" }}>
+            {[...filtered].reverse().map((snap, idx) => {
+              const realIdx = filtered.length - 1 - idx;
+              const isOpen = expanded === realIdx;
+              const submittedReports = (snap.weeklyReports || []).filter((r) => r.submitted).length;
+              const wonDeals = (snap.pipeline || []).filter((d) => d.stage === "Closed").length;
+              return (
+                <div key={realIdx} style={{ borderBottom: "1px solid #E5E7EB" }}>
+                  <div
+                    onClick={() => setExpanded(isOpen ? null : realIdx)}
+                    style={{ padding: "14px 20px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", background: isOpen ? "#F9FAFB" : C.w }}
+                  >
+                    <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.d, minWidth: 170 }}>{fmt(snap.ts)}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6, background: snap.role === "manager" ? "#EEF2FF" : "#F0FDFA", color: snap.role === "manager" ? "#3730A3" : "#0F766E", textTransform: "uppercase", letterSpacing: "0.05em" }}>{snap.role || "unknown"}</span>
+                      <span style={{ fontSize: 12, color: C.g }}>
+                        {(snap.pipeline || []).length} deals · {submittedReports} reports · {wonDeals} won · {(snap.notes || []).length} notes
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); restore(snap); }}
+                        style={{ ...btnS(C.warn, false), padding: "5px 12px", fontSize: 12 }}
+                      >Restore</button>
+                      <span style={{ color: C.g, fontSize: 18, transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
+                    </div>
+                  </div>
+                  {isOpen && (
+                    <div style={{ padding: "0 20px 16px", background: "#F9FAFB" }}>
+                      <pre style={{ margin: 0, padding: 14, background: "#0F172A", color: "#E5E7EB", borderRadius: 8, fontSize: 11, lineHeight: 1.5, overflowX: "auto", maxHeight: 300 }}>
+                        {JSON.stringify({
+                          pipeline: snap.pipeline,
+                          weeklyReports: snap.weeklyReports,
+                          messages: snap.messages,
+                          notes: snap.notes,
+                        }, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -731,6 +923,7 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
     { id: "onboarding", label: "Onboarding" },
     { id: "messages", label: "Messages to Rep" },
     { id: "notes", label: "Private Notes" },
+    { id: "history", label: "Data History" },
   ];
 
   return (
@@ -1348,6 +1541,8 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
         </div>)}
 
         {/* ── PRIVATE NOTES ── */}
+        {tab === "history" && <HistoryView />}
+
         {tab === "notes" && (<div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div>
@@ -1407,7 +1602,9 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
 
 // ─── FORM MODALS ───
 function DealForm({ open, deal, onClose, onSave }) {
-  const [f, setF] = useState(deal || { company: "", segment: "SMB", stage: "Lead", value: 0, geo: "India", daysInStage: 0, nextStep: "", startDate: new Date().toISOString().slice(0, 10) });
+  const DEFAULT_DEAL = { company: "", segment: "SMB", stage: "Lead", value: 0, geo: "India", daysInStage: 0, nextStep: "", startDate: new Date().toISOString().slice(0, 10) };
+  const [f, setF] = useState(deal || DEFAULT_DEAL);
+  React.useEffect(() => { setF(deal || DEFAULT_DEAL); }, [deal]);
   if (!open) return null;
   return (
     <Modal open={open} onClose={onClose} title={deal ? "Edit Deal" : "Add Deal"}>
@@ -1434,7 +1631,9 @@ function DealForm({ open, deal, onClose, onSave }) {
 }
 
 function MsgForm({ open, msg, onClose, onSave }) {
-  const [f, setF] = useState(msg || { date: new Date().toISOString().slice(0, 10), text: "", type: "target" });
+  const DEFAULT_MSG = { date: new Date().toISOString().slice(0, 10), text: "", type: "target" };
+  const [f, setF] = useState(msg || DEFAULT_MSG);
+  React.useEffect(() => { setF(msg || DEFAULT_MSG); }, [msg]);
   if (!open) return null;
   const types = [{ value: "kudos", label: "Kudos", c: C.ok }, { value: "action", label: "Action Required", c: C.warn }, { value: "target", label: "Target / Direction", c: C.pri }];
   return (
@@ -1454,7 +1653,9 @@ function MsgForm({ open, msg, onClose, onSave }) {
 }
 
 function NoteForm({ open, note, onClose, onSave }) {
-  const [f, setF] = useState(note || { date: new Date().toISOString().slice(0, 10), text: "", type: "flag" });
+  const DEFAULT_NOTE = { date: new Date().toISOString().slice(0, 10), text: "", type: "flag" };
+  const [f, setF] = useState(note || DEFAULT_NOTE);
+  React.useEffect(() => { setF(note || DEFAULT_NOTE); }, [note]);
   if (!open) return null;
   const types = [{ value: "positive", label: "Positive", c: C.ok }, { value: "flag", label: "Flag", c: C.bad }, { value: "action", label: "Action Needed", c: C.warn }];
   return (
