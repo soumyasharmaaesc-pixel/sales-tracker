@@ -1259,6 +1259,7 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
   const [msgModal, setMsgModal] = useState({ open: false, msg: null });
   const [noteModal, setNoteModal] = useState({ open: false, note: null });
   const [taskModal, setTaskModal] = useState({ open: false, weekIdx: null });
+  const [reportModal, setReportModal] = useState({ open: false, report: null });
   const [confirmDel, setConfirmDel] = useState({ open: false, type: null, id: null, extra: null });
 
   // DEAL CRUD — every save appends a dated entry to deal.updates[]
@@ -1290,6 +1291,31 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
   // NOTE CRUD (only Admin sees)
   const saveNote = (n) => { if (n.id) setNotes((a) => a.map((x) => x.id === n.id ? n : x)); else setNotes((a) => [...a, { ...n, id: nextId(a) }]); setNoteModal({ open: false, note: null }); };
   const deleteNote = (id) => { setNotes((a) => a.filter((x) => x.id !== id)); setConfirmDel({ open: false }); };
+
+  // WEEKLY REPORT CRUD — Manager can add, edit, remove any week's report
+  const saveReportAdmin = (r) => {
+    const merged = { ...r, submitted: true, submittedAt: r.submittedAt || new Date().toISOString() };
+    if (r.id) {
+      setWeeklyReports((a) => a.map((x) => x.id === merged.id ? merged : x));
+    } else {
+      setWeeklyReports((a) => [...a, { ...merged, id: nextId(a) }]);
+    }
+    setReportModal({ open: false, report: null });
+  };
+  const deleteReport = (id) => { setWeeklyReports((a) => a.filter((x) => x.id !== id)); setConfirmDel({ open: false }); };
+  const newBlankReport = () => {
+    // Auto-generate the next week label so the Manager doesn't have to type one.
+    const nextWeekNum = weeklyReports.length + 1;
+    return {
+      weekLabel: `Week ${nextWeekNum}`,
+      weekStart: new Date().toISOString().slice(0, 10),
+      calls: 0, emails: 0, linkedin: 0,
+      demosBooked: 0, demosDone: 0,
+      proposals: 0, closed: 0,
+      topWin: "", blockers: "", plan: "",
+      submitted: false,
+    };
+  };
 
   // ONBOARDING CRUD
   const addTask = (weekIdx, taskText) => {
@@ -1438,32 +1464,6 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
         {tab === "benchmarks" && (<div>
           {/* Custom benchmark upload lives at the top. Built-in GTM sections below are untouched. */}
           <BenchmarkUploader />
-
-          <h2 style={{ margin: "0 0 4px", fontSize: 20, color: C.d }}>FY27 GTM Benchmarks — Stretch Case</h2>
-          <p style={{ margin: "0 0 20px", fontSize: 14, color: C.g }}>All targets set to Stretch: 300 deals, 25 enterprise, $950 ARPA, $400K exit MRR, $4.8M ARR, $2.75M cumulative.</p>
-
-          {/* Scenario cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 24 }}>
-            {[
-              { label: "Conservative (Base)", data: scenarioTargets.conservative, color: C.g, bg: "#F9FAFB" },
-              { label: "Target Case", data: scenarioTargets.target, color: C.g, bg: "#F9FAFB" },
-              { label: "STRETCH CASE (ACTIVE)", data: scenarioTargets.stretch, color: C.pur, bg: "#F5F3FF" },
-            ].map((s, i) => (
-              <div key={i} style={{ ...card, padding: 18, background: s.bg, borderColor: i === 2 ? C.pur : "#E5E7EB", borderWidth: i === 2 ? 3 : 1, position: "relative" }}>
-                {i === 2 && <div style={{ position: "absolute", top: -10, right: 16, background: C.pur, color: C.w, fontSize: 10, fontWeight: 800, padding: "2px 10px", borderRadius: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Active Target</div>}
-                <div style={{ fontWeight: 700, fontSize: 14, color: s.color, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>{s.label}</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13 }}>
-                  <div><span style={{ color: C.g }}>SMB Deals:</span> <strong>{s.data.deals}</strong></div>
-                  <div><span style={{ color: C.g }}>Enterprise:</span> <strong>{s.data.enterprise}</strong></div>
-                  <div><span style={{ color: C.g }}>ARPA:</span> <strong>${s.data.arpa}</strong></div>
-                  <div><span style={{ color: C.g }}>Customers:</span> <strong>{s.data.customers}</strong></div>
-                  <div><span style={{ color: C.g }}>Exit MRR:</span> <strong>${(s.data.exitMRR / 1000).toFixed(0)}K</strong></div>
-                  <div><span style={{ color: C.g }}>Exit ARR:</span> <strong>${(s.data.exitARR / 1000000).toFixed(2)}M</strong></div>
-                  <div style={{ gridColumn: "1 / -1" }}><span style={{ color: C.g }}>Cumulative Rev:</span> <strong style={{ color: s.color, fontSize: 16 }}>${s.data.cumRev >= 1000000 ? (s.data.cumRev / 1000000).toFixed(1) + "M" : (s.data.cumRev / 1000).toFixed(0) + "K"}</strong></div>
-                </div>
-              </div>
-            ))}
-          </div>
 
           {/* Monthly roadmap chart */}
           <div style={{ ...card, padding: 24, marginBottom: 24 }}>
@@ -1812,17 +1812,34 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
           )}
         </div>)}
 
-        {/* ── WEEKLY REPORTS (review) ── */}
+        {/* ── WEEKLY REPORTS (full CRUD — Manager can add, edit, remove) ── */}
         {tab === "reports" && (<div>
-          <h2 style={{ margin: "0 0 4px", fontSize: 20, color: C.d }}>Rep's Weekly Reports</h2>
-          <p style={{ margin: "0 0 20px", fontSize: 14, color: C.g }}>Submitted by Rep. Review before Monday standup.</p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20, color: C.d }}>Rep's Weekly Reports</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Review, edit, add or remove any week's report. Changes are logged to the Data History reservoir.</p>
+            </div>
+            <button onClick={() => setReportModal({ open: true, report: newBlankReport() })} style={btnS(C.pri, true)}>+ Add Report</button>
+          </div>
+          {weeklyReports.length === 0 && (
+            <div style={{ ...card, padding: 40, textAlign: "center", color: C.g, fontSize: 14 }}>
+              No weekly reports yet. Click <strong>+ Add Report</strong> to create one manually, or wait for Rep to submit their first report.
+            </div>
+          )}
           {[...weeklyReports].reverse().map((r) => (
-            <div key={r.id} style={{ ...card, padding: 20, marginBottom: 14, borderLeft: r.submitted ? `4px solid ${C.ok}` : `4px solid ${C.warn}`, opacity: r.submitted ? 1 : 0.6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontWeight: 700, fontSize: 15, color: C.d }}>{r.weekLabel}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: r.submitted ? "#D1FAE5" : "#FDE68A", color: r.submitted ? "#065F46" : "#92400E" }}>
-                  {r.submitted ? "SUBMITTED" : "NOT YET"}
-                </span>
+            <div key={r.id} style={{ ...card, padding: 20, marginBottom: 14, borderLeft: r.submitted ? `4px solid ${C.ok}` : `4px solid ${C.warn}`, opacity: r.submitted ? 1 : 0.7 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: C.d }}>{r.weekLabel}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: r.submitted ? "#D1FAE5" : "#FDE68A", color: r.submitted ? "#065F46" : "#92400E" }}>
+                    {r.submitted ? "SUBMITTED" : "NOT YET"}
+                  </span>
+                  {r.submittedAt && <span style={{ fontSize: 11, color: C.g }}>· {new Date(r.submittedAt).toLocaleString()}</span>}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => setReportModal({ open: true, report: r })} style={{ ...btnS(C.pri, false), padding: "5px 12px", fontSize: 12 }}>Edit</button>
+                  <button onClick={() => setConfirmDel({ open: true, type: "report", id: r.id, extra: r.weekLabel })} style={{ ...btnS(C.bad, false), padding: "5px 12px", fontSize: 12 }}>Remove</button>
+                </div>
               </div>
               {r.submitted && (
                 <div>
@@ -1981,14 +1998,20 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
       <MsgForm open={msgModal.open} msg={msgModal.msg} onClose={() => setMsgModal({ open: false, msg: null })} onSave={saveMsg} />
       <NoteForm open={noteModal.open} note={noteModal.note} onClose={() => setNoteModal({ open: false, note: null })} onSave={saveNote} />
       <TaskForm open={taskModal.open} weekIdx={taskModal.weekIdx} weeks={onboarding} onClose={() => setTaskModal({ open: false, weekIdx: null })} onSave={addTask} />
-      <Modal open={confirmDel.open} onClose={() => setConfirmDel({ open: false })} title="Confirm Delete" width={380}>
-        <p style={{ margin: "0 0 20px", fontSize: 15, color: C.d }}>Delete this? Can't be undone.</p>
+      <ReportAdminForm open={reportModal.open} report={reportModal.report} onClose={() => setReportModal({ open: false, report: null })} onSave={saveReportAdmin} />
+      <Modal open={confirmDel.open} onClose={() => setConfirmDel({ open: false })} title="Confirm Delete" width={400}>
+        <p style={{ margin: "0 0 20px", fontSize: 15, color: C.d }}>
+          {confirmDel.type === "report"
+            ? <>Remove the weekly report <strong>{confirmDel.extra}</strong>? This can't be undone (but the Data History reservoir keeps an append-only log).</>
+            : <>Delete this? Can't be undone.</>}
+        </p>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button onClick={() => setConfirmDel({ open: false })} style={btnS(C.g, false)}>Cancel</button>
           <button onClick={() => {
             if (confirmDel.type === "deal") deleteDeal(confirmDel.id);
             else if (confirmDel.type === "msg") deleteMsg(confirmDel.id);
             else if (confirmDel.type === "note") deleteNote(confirmDel.id);
+            else if (confirmDel.type === "report") deleteReport(confirmDel.id);
           }} style={btnS(C.bad, true)}>Delete</button>
         </div>
       </Modal>
@@ -2062,6 +2085,50 @@ function NoteForm({ open, note, onClose, onSave }) {
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
         <button onClick={onClose} style={btnS(C.g, false)}>Cancel</button>
         <button onClick={() => onSave(f)} style={btnS(C.pri, true)} disabled={!f.text}>{note ? "Save" : "Add"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Weekly Report Admin Form ─── (Manager can add or edit any report,
+// including the week label and week-start date, unlike the Rep form.)
+function ReportAdminForm({ open, report, onClose, onSave }) {
+  const DEFAULT_REPORT = {
+    weekLabel: "", weekStart: new Date().toISOString().slice(0, 10),
+    calls: 0, emails: 0, linkedin: 0,
+    demosBooked: 0, demosDone: 0, proposals: 0, closed: 0,
+    topWin: "", blockers: "", plan: "", submitted: true,
+  };
+  const [f, setF] = useState(report || DEFAULT_REPORT);
+  React.useEffect(() => { setF(report || DEFAULT_REPORT); }, [report]);
+  if (!open || !report) return null;
+  const n = (label, key) => (
+    <Field label={label}><input style={inp} type="number" min="0" value={f[key] || 0} onChange={(e) => setF({ ...f, [key]: parseInt(e.target.value) || 0 })} /></Field>
+  );
+  const isNew = !report.id;
+  return (
+    <Modal open={open} onClose={onClose} title={isNew ? "Add Weekly Report" : `Edit: ${report.weekLabel}`} width={600}>
+      <div style={{ padding: "10px 14px", background: "#EEF2FF", borderRadius: 8, marginBottom: 16, fontSize: 13, color: "#3730A3" }}>
+        {isNew
+          ? "Manually create a weekly report. This change is preserved in the Data History reservoir."
+          : "Edit any field. The Rep will see the updated values the next time they open their dashboard."}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+        <Field label="Week Label"><input style={inp} value={f.weekLabel || ""} onChange={(e) => setF({ ...f, weekLabel: e.target.value })} placeholder="e.g. Week 1 (Apr 10–14)" /></Field>
+        <Field label="Week Start Date"><input style={inp} type="date" value={f.weekStart || ""} onChange={(e) => setF({ ...f, weekStart: e.target.value })} /></Field>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+        {n("Calls", "calls")}{n("Emails", "emails")}{n("LinkedIn", "linkedin")}{n("Demos Booked", "demosBooked")}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        {n("Demos Done", "demosDone")}{n("Proposals", "proposals")}{n("Deals Closed", "closed")}
+      </div>
+      <Field label="Top Win"><input style={inp} value={f.topWin || ""} onChange={(e) => setF({ ...f, topWin: e.target.value })} placeholder="Biggest accomplishment this week" /></Field>
+      <Field label="Blockers / Challenges"><textarea style={{ ...inp, height: 60, resize: "vertical" }} value={f.blockers || ""} onChange={(e) => setF({ ...f, blockers: e.target.value })} placeholder="What's slowing the Rep down?" /></Field>
+      <Field label="Next Week Plan"><textarea style={{ ...inp, height: 60, resize: "vertical" }} value={f.plan || ""} onChange={(e) => setF({ ...f, plan: e.target.value })} placeholder="Priorities for next week" /></Field>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+        <button onClick={onClose} style={btnS(C.g, false)}>Cancel</button>
+        <button onClick={() => onSave(f)} style={btnS(C.pri, true)} disabled={!f.weekLabel}>{isNew ? "Add Report" : "Save"}</button>
       </div>
     </Modal>
   );
