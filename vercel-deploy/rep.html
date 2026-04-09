@@ -13,6 +13,8 @@
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 </head>
 <body>
@@ -398,11 +400,11 @@ function App() {
         />
       ) : (
         <SalesLeadView
-          pipeline={pipeline}
+          pipeline={pipeline} setPipeline={setPipeline}
           weeklyReports={weeklyReports} setWeeklyReports={setWeeklyReports}
           onboarding={onboarding} setOnboarding={setOnboarding}
           messages={messages}
-          metrics={metrics} submitted={submitted}
+          metrics={metrics} submitted={submitted} nextId={nextId}
         />
       )}
     </div>
@@ -412,9 +414,10 @@ function App() {
 // ═══════════════════════════════════════════════════
 //  REP VIEW — RESTRICTED
 // ═══════════════════════════════════════════════════
-function SalesLeadView({ pipeline, weeklyReports, setWeeklyReports, onboarding, setOnboarding, messages, metrics, submitted }) {
+function SalesLeadView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onboarding, setOnboarding, messages, metrics, submitted, nextId }) {
   const [tab, setTab] = useState("home");
   const [reportModal, setReportModal] = useState({ open: false, report: null });
+  const [dealModal, setDealModal] = useState({ open: false, deal: null });
 
   const toggleTask = (weekIdx, taskId) => {
     setOnboarding((ob) => ob.map((w, i) => i === weekIdx ? { ...w, tasks: w.tasks.map((t) => t.id === taskId ? { ...t, done: !t.done } : t) } : w));
@@ -427,6 +430,26 @@ function SalesLeadView({ pipeline, weeklyReports, setWeeklyReports, onboarding, 
     const merged = { ...base, ...values, submitted: true, submittedAt: new Date().toISOString() };
     setWeeklyReports((a) => a.map((x) => x.id === merged.id ? merged : x));
     setReportModal({ open: false, report: null });
+  };
+
+  // Rep DEAL CRUD — every save appends a dated entry to deal.updates[]
+  const saveDeal = (d) => {
+    if (d.id) {
+      setPipeline((p) => p.map((x) => {
+        if (x.id !== d.id) return x;
+        const entry = buildDealUpdateEntry(x, d, "rep");
+        const updates = [...(x.updates || [])];
+        if (entry) updates.push(entry);
+        return { ...d, updates };
+      }));
+    } else {
+      setPipeline((p) => {
+        const id = nextId(p);
+        const entry = buildDealUpdateEntry(null, { ...d, id }, "rep");
+        return [...p, { ...d, id, updates: [entry] }];
+      });
+    }
+    setDealModal({ open: false, deal: null });
   };
 
   const pendingReport = weeklyReports.find((r) => !r.submitted);
@@ -632,12 +655,17 @@ function SalesLeadView({ pipeline, weeklyReports, setWeeklyReports, onboarding, 
           })}
         </div>)}
 
-        {/* ─── PIPELINE (read only) ─── */}
+        {/* ─── PIPELINE (rep can add/edit leads; every change is dated) ─── */}
         {tab === "pipeline" && (<div>
-          <h2 style={{ margin: "0 0 4px", fontSize: 20, color: C.d }}>My Deal Pipeline</h2>
-          <p style={{ margin: "0 0 20px", fontSize: 14, color: C.g }}>View your deals. Pipeline is managed centrally — update your CRM and it'll reflect here.</p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20, color: C.d }}>My Deal Pipeline</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: C.g }}>Add new leads and update existing ones. Every change is automatically dated and visible to Management.</p>
+            </div>
+            <button onClick={() => setDealModal({ open: true, deal: null })} style={btnS(C.teal, true)}>+ Add Lead</button>
+          </div>
 
-          <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 20, marginTop: 16, flexWrap: "wrap" }}>
             {[
               { l: "Open Deals", v: metrics.active.length, c: C.teal },
               { l: "Pipeline MRR", v: `$${metrics.pv.toLocaleString()}`, c: C.pur },
@@ -655,14 +683,14 @@ function SalesLeadView({ pipeline, weeklyReports, setWeeklyReports, onboarding, 
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                 <thead>
                   <tr style={{ background: "#F9FAFB" }}>
-                    {["Company", "Segment", "Geo", "Stage", "MRR", "Days in Stage", "Next Step"].map((h) => (
-                      <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    {["Company", "Segment", "Geo", "Stage", "MRR", "Days in Stage", "Next Step", "Activity Log", "Actions"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {[...pipeline].sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage)).map((d) => (
-                    <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                    <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top" }}>
                       <td style={{ padding: "12px 14px", fontWeight: 600, color: C.d }}>{d.company}</td>
                       <td style={{ padding: "12px 14px", color: C.g }}>{d.segment}</td>
                       <td style={{ padding: "12px 14px", color: C.g }}>{d.geo}</td>
@@ -670,8 +698,15 @@ function SalesLeadView({ pipeline, weeklyReports, setWeeklyReports, onboarding, 
                       <td style={{ padding: "12px 14px", fontWeight: 600, color: C.teal }}>${d.value.toLocaleString()}/mo</td>
                       <td style={{ padding: "12px 14px", color: d.daysInStage > 7 ? C.bad : C.g }}>{d.stage === "Closed" ? "—" : `${d.daysInStage}d`}</td>
                       <td style={{ padding: "12px 14px", color: C.g, fontStyle: "italic" }}>{d.nextStep}</td>
+                      <td style={{ padding: "12px 14px" }}><DealTimeline deal={d} /></td>
+                      <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                        <button onClick={() => setDealModal({ open: true, deal: d })} style={{ ...btnS(C.teal, false), padding: "4px 10px", fontSize: 12 }}>Edit</button>
+                      </td>
                     </tr>
                   ))}
+                  {pipeline.length === 0 && (
+                    <tr><td colSpan={9} style={{ padding: 32, textAlign: "center", color: C.g, fontSize: 13 }}>No deals yet. Click <strong>+ Add Lead</strong> to log your first one.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -709,6 +744,9 @@ function SalesLeadView({ pipeline, weeklyReports, setWeeklyReports, onboarding, 
 
       {/* Report Modal */}
       <WeeklyReportForm open={reportModal.open} report={reportModal.report} onClose={() => setReportModal({ open: false, report: null })} onSave={saveReport} />
+
+      {/* Rep can add/edit leads — every change is appended to deal.updates[] */}
+      <DealForm open={dealModal.open} deal={dealModal.deal} onClose={() => setDealModal({ open: false, deal: null })} onSave={saveDeal} />
     </div>
   );
 }
@@ -897,6 +935,322 @@ function HistoryView() {
 
 
 // ═══════════════════════════════════════════════════
+//  BENCHMARK UPLOADER — Manager uploads xlsx/csv/docx.
+//  Every upload is kept (append-only); the built-in
+//  GTM benchmarks section below is NEVER removed.
+// ═══════════════════════════════════════════════════
+const BENCHMARKS_KEY = "thh_sales_dashboard_benchmarks_v1";
+
+function loadBenchmarks() {
+  try {
+    const raw = localStorage.getItem(BENCHMARKS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { return []; }
+}
+
+function saveBenchmarksLS(arr) {
+  try { localStorage.setItem(BENCHMARKS_KEY, JSON.stringify(arr)); } catch (e) {}
+}
+
+function parseWorkbookRows(workbook) {
+  const result = { weekly: [], daily: [], sheets: {} };
+  workbook.SheetNames.forEach((name) => {
+    const ws = workbook.Sheets[name];
+    const rows = window.XLSX.utils.sheet_to_json(ws, { defval: null, raw: true });
+    result.sheets[name] = rows;
+  });
+  const weeklyName = workbook.SheetNames.find((n) => /weekly/i.test(n)) || workbook.SheetNames[0];
+  const dailyName = workbook.SheetNames.find((n) => /daily/i.test(n));
+  const get = (r, needle) => {
+    const keys = Object.keys(r);
+    const k = keys.find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, "").includes(needle));
+    return k ? r[k] : null;
+  };
+  const num = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
+  if (weeklyName && result.sheets[weeklyName]) {
+    result.weekly = result.sheets[weeklyName]
+      .filter((r) => r && Object.values(r).some((v) => v !== null && v !== ""))
+      .map((r) => ({
+        week: get(r, "week") || null,
+        label: String(get(r, "label") || get(r, "weeklabel") || "") || `Week ${get(r, "week") || ""}`,
+        calls: num(get(r, "calls")),
+        emails: num(get(r, "emails")),
+        linkedin: num(get(r, "linkedin")),
+        demosBooked: num(get(r, "demosbooked")),
+        demosDone: num(get(r, "demosdone")),
+        proposals: num(get(r, "proposals")),
+        closed: num(get(r, "dealsclosed")) || num(get(r, "closed")),
+        mrr: num(get(r, "mrr")),
+        pipeline: num(get(r, "pipelinevalue")),
+        notes: String(get(r, "notes") || ""),
+      }))
+      .filter((r) => r.label || r.week || r.calls || r.emails);
+  }
+  if (dailyName && result.sheets[dailyName]) {
+    result.daily = result.sheets[dailyName]
+      .filter((r) => r && Object.values(r).some((v) => v !== null && v !== ""))
+      .map((r) => ({
+        day: get(r, "day") || null,
+        date: String(get(r, "date") || ""),
+        calls: num(get(r, "calls")),
+        emails: num(get(r, "emails")),
+        linkedin: num(get(r, "linkedin")),
+        demosBooked: num(get(r, "demosbooked")),
+        demosDone: num(get(r, "demosdone")),
+        notes: String(get(r, "notes") || ""),
+      }))
+      .filter((r) => r.date || r.day);
+  }
+  return result;
+}
+
+function BenchmarkUploader() {
+  const [benchmarks, setBenchmarks] = React.useState(() => loadBenchmarks());
+  const [status, setStatus] = React.useState(null);
+  const fileInputRef = React.useRef(null);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    const name = file.name;
+    const ext = (name.split(".").pop() || "").toLowerCase();
+    setStatus({ type: "loading", text: `Parsing ${name}…` });
+    try {
+      let entry = {
+        id: Date.now(),
+        uploadedAt: new Date().toISOString(),
+        name,
+        source: ext,
+        weekly: [],
+        daily: [],
+        text: "",
+      };
+      if (ext === "xlsx" || ext === "xls" || ext === "csv") {
+        if (typeof window.XLSX === "undefined") throw new Error("SheetJS not loaded yet — try again in a moment.");
+        const buf = await file.arrayBuffer();
+        const wb = window.XLSX.read(buf, { type: "array", cellDates: true });
+        const parsed = parseWorkbookRows(wb);
+        entry = { ...entry, weekly: parsed.weekly, daily: parsed.daily };
+      } else if (ext === "docx") {
+        if (typeof window.mammoth === "undefined") throw new Error("mammoth not loaded yet — try again in a moment.");
+        const buf = await file.arrayBuffer();
+        const res = await window.mammoth.extractRawText({ arrayBuffer: buf });
+        entry.text = res.value || "";
+      } else {
+        throw new Error(`Unsupported file type: .${ext}. Please use .xlsx, .xls, .csv, or .docx.`);
+      }
+      const next = [...loadBenchmarks(), entry];
+      saveBenchmarksLS(next);
+      setBenchmarks(next);
+      if (ext === "docx") {
+        setStatus({ type: "ok", text: `Uploaded ${name} · ${entry.text.length} chars extracted` });
+      } else {
+        setStatus({ type: "ok", text: `Uploaded ${name} · ${entry.weekly.length} weekly rows · ${entry.daily.length} daily rows` });
+      }
+    } catch (e) {
+      setStatus({ type: "err", text: `Error: ${e.message}` });
+    }
+  };
+
+  const removeBenchmark = (id) => {
+    if (!window.confirm("Remove this uploaded benchmark? (The built-in GTM benchmarks below are unaffected, and your Data History reservoir keeps the full change log.)")) return;
+    const next = loadBenchmarks().filter((b) => b.id !== id);
+    saveBenchmarksLS(next);
+    setBenchmarks(next);
+  };
+
+  return (
+    <div style={{ ...card, padding: 24, marginBottom: 24, borderLeft: `5px solid ${C.pri}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
+        <div>
+          <h3 style={{ margin: "0 0 4px", fontSize: 16, color: C.d }}>Custom Benchmark Uploads</h3>
+          <p style={{ margin: 0, fontSize: 13, color: C.g, maxWidth: 640, lineHeight: 1.5 }}>
+            Upload a sales rep's benchmark file (Excel, CSV, or Word). Every upload is preserved — the built-in FY27 GTM benchmarks below are <strong>never removed</strong>. The latest upload is treated as the active target.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <a href="sales-tracker-benchmark-template.xlsx" download style={{
+            padding: "10px 18px", borderRadius: 8, background: "#EEF2FF", color: C.pri,
+            fontWeight: 700, fontSize: 13, textDecoration: "none", border: `1.5px solid ${C.pri}`,
+            display: "inline-flex", alignItems: "center", gap: 6,
+          }}>↓ Download Template (.xlsx)</a>
+          <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={{
+            padding: "10px 18px", borderRadius: 8, border: "none", cursor: "pointer",
+            background: C.pri, color: C.w, fontWeight: 700, fontSize: 13,
+          }}>↑ Upload Benchmark</button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv,.docx"
+            style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) handleFile(f); e.target.value = ""; }}
+          />
+        </div>
+      </div>
+
+      {status && (
+        <div style={{
+          padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13,
+          background: status.type === "ok" ? "#D1FAE5" : status.type === "err" ? "#FEE2E2" : "#EEF2FF",
+          color: status.type === "ok" ? "#065F46" : status.type === "err" ? "#991B1B" : "#3730A3",
+          border: `1px solid ${status.type === "ok" ? "#6EE7B7" : status.type === "err" ? "#FCA5A5" : "#C7D2FE"}`,
+        }}>{status.text}</div>
+      )}
+
+      {benchmarks.length === 0 ? (
+        <div style={{ padding: 20, background: "#F9FAFB", borderRadius: 8, textAlign: "center", color: C.g, fontSize: 13 }}>
+          No custom benchmarks uploaded yet. Download the template above, fill in your targets, and upload it here.
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 11, color: C.g, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
+            Uploaded Benchmarks ({benchmarks.length}) · Latest is the active target
+          </div>
+          {[...benchmarks].reverse().map((b, idx) => {
+            const isLatest = idx === 0;
+            return (
+              <div key={b.id} style={{
+                padding: 14, marginBottom: 10, borderRadius: 8,
+                border: isLatest ? `2px solid ${C.ok}` : "1px solid #E5E7EB",
+                background: isLatest ? "#F0FDF4" : "#F9FAFB",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: C.d }}>{b.name}</span>
+                    {isLatest && <span style={{ marginLeft: 8, fontSize: 10, background: C.ok, color: C.w, padding: "2px 8px", borderRadius: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Active</span>}
+                    <span style={{ marginLeft: 8, fontSize: 11, color: C.g }}>uploaded {new Date(b.uploadedAt).toLocaleString()}</span>
+                  </div>
+                  <button onClick={() => removeBenchmark(b.id)} style={{ padding: "5px 12px", border: "1px solid #FCA5A5", background: C.w, color: C.bad, borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Remove</button>
+                </div>
+                <div style={{ fontSize: 12, color: C.g, marginBottom: 8 }}>
+                  {b.source === "docx"
+                    ? <span>DOCX · {b.text.length} chars extracted</span>
+                    : <span>{b.source.toUpperCase()} · {b.weekly.length} weekly rows · {b.daily.length} daily rows</span>}
+                </div>
+                {b.weekly && b.weekly.length > 0 && (
+                  <div style={{ overflowX: "auto", background: C.w, borderRadius: 6, border: "1px solid #E5E7EB" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                      <thead>
+                        <tr style={{ background: "#F3F4F6" }}>
+                          {["Week", "Calls", "Emails", "LinkedIn", "Demos", "Props", "Deals", "MRR"].map((h) => (
+                            <th key={h} style={{ padding: "6px 8px", textAlign: "left", color: C.g, fontWeight: 700, borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {b.weekly.slice(0, 6).map((w, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid #F9FAFB" }}>
+                            <td style={{ padding: "5px 8px", fontWeight: 600, color: C.d }}>{w.label || `W${w.week}`}</td>
+                            <td style={{ padding: "5px 8px" }}>{w.calls || "—"}</td>
+                            <td style={{ padding: "5px 8px" }}>{w.emails || "—"}</td>
+                            <td style={{ padding: "5px 8px" }}>{w.linkedin || "—"}</td>
+                            <td style={{ padding: "5px 8px" }}>{w.demosDone || "—"}</td>
+                            <td style={{ padding: "5px 8px" }}>{w.proposals || "—"}</td>
+                            <td style={{ padding: "5px 8px" }}>{w.closed || "—"}</td>
+                            <td style={{ padding: "5px 8px", color: C.ok, fontWeight: 600 }}>{w.mrr ? `$${w.mrr.toLocaleString()}` : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {b.weekly.length > 6 && <div style={{ padding: "5px 8px", fontSize: 11, color: C.g, fontStyle: "italic" }}>… and {b.weekly.length - 6} more rows</div>}
+                  </div>
+                )}
+                {b.source === "docx" && b.text && (
+                  <div style={{ padding: 10, background: C.w, borderRadius: 6, border: "1px solid #E5E7EB", fontSize: 12, color: C.d, maxHeight: 160, overflowY: "auto", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                    {b.text.slice(0, 1200)}{b.text.length > 1200 ? "…" : ""}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════
+//  DEAL ACTIVITY LOG HELPER — builds dated entries
+//  for the deal.updates[] array. Both Manager and Rep
+//  saveDeal() funnel through this so every change is
+//  timestamped and attributed.
+// ═══════════════════════════════════════════════════
+function buildDealUpdateEntry(prev, next, role) {
+  const today = new Date().toISOString().slice(0, 10);
+  const by = role === "manager" ? "Manager" : "Rep";
+  if (!prev) {
+    return {
+      date: today,
+      by,
+      action: "created",
+      changes: [`Lead created · ${next.company} · ${next.stage} · $${next.value}/mo`],
+    };
+  }
+  const fields = [
+    ["company", "Company"],
+    ["segment", "Segment"],
+    ["stage", "Stage"],
+    ["value", "MRR"],
+    ["geo", "Geo"],
+    ["daysInStage", "Days in stage"],
+    ["nextStep", "Next step"],
+  ];
+  const changes = [];
+  fields.forEach(([k, label]) => {
+    const a = prev[k];
+    const b = next[k];
+    if ((a || "") !== (b || "")) {
+      changes.push(`${label}: ${a === 0 || a ? a : "—"} → ${b === 0 || b ? b : "—"}`);
+    }
+  });
+  if (changes.length === 0) return null;
+  return { date: today, by, action: "updated", changes };
+}
+
+
+// ═══════════════════════════════════════════════════
+//  DEAL TIMELINE — expandable list of dated updates
+//  rendered inline in both pipeline views.
+// ═══════════════════════════════════════════════════
+function DealTimeline({ deal }) {
+  const [open, setOpen] = React.useState(false);
+  const updates = deal.updates || [];
+  if (updates.length === 0) {
+    return (
+      <span style={{ fontSize: 11, color: C.g, fontStyle: "italic" }}>No activity logged</span>
+    );
+  }
+  return (
+    <div>
+      <button onClick={() => setOpen(!open)} style={{
+        padding: "3px 10px", border: "1px solid #E5E7EB", background: C.w,
+        color: C.pri, borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600,
+      }}>
+        {open ? "▾" : "▸"} {updates.length} update{updates.length === 1 ? "" : "s"}
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, paddingLeft: 10, borderLeft: `2px solid ${C.pri}` }}>
+          {[...updates].reverse().map((u, i) => (
+            <div key={i} style={{ marginBottom: 8, fontSize: 12 }}>
+              <div style={{ fontWeight: 700, color: C.d }}>
+                <span style={{ color: C.pri }}>{u.date}</span>
+                <span style={{ color: C.g, marginLeft: 6, fontWeight: 500 }}>· {u.by} · {u.action}</span>
+              </div>
+              <ul style={{ margin: "4px 0 0 16px", padding: 0, color: C.g, lineHeight: 1.5 }}>
+                {(u.changes || []).map((c, j) => <li key={j}>{c}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════
 //  MANAGER VIEW — FULL ADMIN
 // ═══════════════════════════════════════════════════
 function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onboarding, setOnboarding, messages, setMessages, notes, setNotes, metrics, submitted, nextId }) {
@@ -907,8 +1261,25 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
   const [taskModal, setTaskModal] = useState({ open: false, weekIdx: null });
   const [confirmDel, setConfirmDel] = useState({ open: false, type: null, id: null, extra: null });
 
-  // DEAL CRUD
-  const saveDeal = (d) => { if (d.id) setPipeline((p) => p.map((x) => x.id === d.id ? d : x)); else setPipeline((p) => [...p, { ...d, id: nextId(p) }]); setDealModal({ open: false, deal: null }); };
+  // DEAL CRUD — every save appends a dated entry to deal.updates[]
+  const saveDeal = (d) => {
+    if (d.id) {
+      setPipeline((p) => p.map((x) => {
+        if (x.id !== d.id) return x;
+        const entry = buildDealUpdateEntry(x, d, "manager");
+        const updates = [...(x.updates || [])];
+        if (entry) updates.push(entry);
+        return { ...d, updates };
+      }));
+    } else {
+      setPipeline((p) => {
+        const id = nextId(p);
+        const entry = buildDealUpdateEntry(null, { ...d, id }, "manager");
+        return [...p, { ...d, id, updates: [entry] }];
+      });
+    }
+    setDealModal({ open: false, deal: null });
+  };
   const deleteDeal = (id) => { setPipeline((p) => p.filter((x) => x.id !== id)); setConfirmDel({ open: false }); };
 
   // MESSAGE CRUD (Rep sees these)
@@ -1065,6 +1436,9 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
 
         {/* ── GTM BENCHMARKS ── */}
         {tab === "benchmarks" && (<div>
+          {/* Custom benchmark upload lives at the top. Built-in GTM sections below are untouched. */}
+          <BenchmarkUploader />
+
           <h2 style={{ margin: "0 0 4px", fontSize: 20, color: C.d }}>FY27 GTM Benchmarks — Stretch Case</h2>
           <p style={{ margin: "0 0 20px", fontSize: 14, color: C.g }}>All targets set to Stretch: 300 deals, 25 enterprise, $950 ARPA, $400K exit MRR, $4.8M ARR, $2.75M cumulative.</p>
 
@@ -1400,13 +1774,13 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                 <thead><tr style={{ background: "#F9FAFB" }}>
-                  {["Company", "Segment", "Geo", "Stage", "MRR", "Days", "Next Step", "Actions"].map((h) => (
+                  {["Company", "Segment", "Geo", "Stage", "MRR", "Days", "Next Step", "Activity Log", "Actions"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "10px 14px", borderBottom: "2px solid #E5E7EB", color: C.g, fontWeight: 600, fontSize: 11, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr></thead>
                 <tbody>
                   {[...pipeline].sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage)).map((d) => (
-                    <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                    <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top" }}>
                       <td style={{ padding: "12px 14px", fontWeight: 600, color: C.d }}>{d.company}</td>
                       <td style={{ padding: "12px 14px", color: C.g }}>{d.segment}</td>
                       <td style={{ padding: "12px 14px", color: C.g }}>{d.geo}</td>
@@ -1414,6 +1788,7 @@ function AdminView({ pipeline, setPipeline, weeklyReports, setWeeklyReports, onb
                       <td style={{ padding: "12px 14px", fontWeight: 600, color: C.pri }}>${d.value.toLocaleString()}</td>
                       <td style={{ padding: "12px 14px", color: d.daysInStage > 7 ? C.bad : C.g }}>{d.stage === "Closed" ? "—" : `${d.daysInStage}d`}</td>
                       <td style={{ padding: "12px 14px", color: C.g, fontStyle: "italic" }}>{d.nextStep}</td>
+                      <td style={{ padding: "12px 14px" }}><DealTimeline deal={d} /></td>
                       <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
                         <button onClick={() => setDealModal({ open: true, deal: d })} style={{ ...btnS(C.pri, false), padding: "4px 10px", fontSize: 12, marginRight: 6 }}>Edit</button>
                         <button onClick={() => setConfirmDel({ open: true, type: "deal", id: d.id })} style={{ ...btnS(C.bad, false), padding: "4px 10px", fontSize: 12 }}>Del</button>
